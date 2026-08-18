@@ -1,8 +1,51 @@
-import asyncio
-from datetime import datetime, timezone
-
 import os
+import asyncio
+
+from datetime import datetime, timezone
 from typing import Optional
+
+from pydantic import BaseModel
+from dotenv import load_dotenv
+
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    Query,
+    Security,
+)
+
+from fastapi.security import (
+    HTTPAuthorizationCredentials,
+    HTTPBearer,
+)
+
+from services.tasks import (
+    TaskError,
+    create_task,
+    get_task,
+    get_tasks,
+    update_task,
+    complete_task,
+    delete_task,
+    get_today_tasks,
+    get_overdue_tasks,
+    get_priority_tasks,
+)
+
+from services.highlevel import (
+    HighLevelError,
+    get_registered_accounts,
+    get_location,
+    get_pipelines,
+    get_workflows,
+    get_tags,
+    get_conversations,
+    search_contacts,
+    search_opportunities,
+    get_agent_studio_agents,
+    get_account_summary,
+)
+
 from services.github import (
     GitHubError,
     get_registered_projects,
@@ -14,25 +57,16 @@ from services.github import (
     get_project_summary,
     get_active_project_activity,
 )
-from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Query, Security
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from services.highlevel import (
-    HighLevelError,
-    get_location,
-    get_pipelines,
-    get_workflows,
-    get_tags,
-    get_conversations,
-    search_contacts,
-    search_opportunities,
-    get_agent_studio_agents,
-)
 
 load_dotenv()
 
 COS_API_KEY = os.getenv("COS_API_KEY")
+
+
+# =========================================================
+# FASTAPI
+# =========================================================
 
 app = FastAPI(
     title="WadadliTech Chief of Staff API",
@@ -40,12 +74,49 @@ app = FastAPI(
         "Secure middleware between WD-AI-001 "
         "and WadadliTech business systems."
     ),
-    version="1.2.0",
+    version="2.1.0",
 )
+
+
+# =========================================================
+# REQUEST MODELS
+# =========================================================
+
+class TaskCreateRequest(BaseModel):
+    title: str
+    description: Optional[str] = None
+    department: Optional[str] = None
+    project: Optional[str] = None
+    client: Optional[str] = None
+    owner: Optional[str] = "Jermain Gordon"
+    priority: str = "NORMAL"
+    due_date: Optional[str] = None
+    next_action: Optional[str] = None
+    blocker: Optional[str] = None
+    source: str = "COS"
+
+
+class TaskUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    department: Optional[str] = None
+    project: Optional[str] = None
+    client: Optional[str] = None
+    owner: Optional[str] = None
+    priority: Optional[str] = None
+    status: Optional[str] = None
+    due_date: Optional[str] = None
+    next_action: Optional[str] = None
+    blocker: Optional[str] = None
+
+
+# =========================================================
+# SECURITY
+# =========================================================
 
 security = HTTPBearer(
     scheme_name="COS API Key",
-    description="Enter the COS API key. Swagger will send it as a Bearer token.",
+    description="Enter the WadadliTech Chief of Staff API key.",
 )
 
 
@@ -55,13 +126,13 @@ def verify_api_key(
     if not COS_API_KEY:
         raise HTTPException(
             status_code=500,
-            detail="COS_API_KEY is not configured on the server.",
+            detail="COS_API_KEY is not configured.",
         )
 
     if not credentials:
         raise HTTPException(
             status_code=401,
-            detail="Authorization credentials are required.",
+            detail="Authentication is required.",
         )
 
     if credentials.scheme.lower() != "bearer":
@@ -79,9 +150,20 @@ def verify_api_key(
     return True
 
 
-async def run_highlevel_call(callable_obj, *args, **kwargs):
+# =========================================================
+# SERVICE ERROR HANDLERS
+# =========================================================
+
+async def run_highlevel_call(
+    callable_obj,
+    *args,
+    **kwargs
+):
     try:
-        return await callable_obj(*args, **kwargs)
+        return await callable_obj(
+            *args,
+            **kwargs
+        )
 
     except HighLevelError as exc:
         raise HTTPException(
@@ -89,14 +171,54 @@ async def run_highlevel_call(callable_obj, *args, **kwargs):
             detail=str(exc),
         )
 
-async def safe_call(source_name, callable_obj, *args, **kwargs):
-    """
-    Run an external service call without allowing one failed integration
-    to crash the entire executive summary.
-    """
 
+async def run_github_call(
+    callable_obj,
+    *args,
+    **kwargs
+):
     try:
-        result = await callable_obj(*args, **kwargs)
+        return await callable_obj(
+            *args,
+            **kwargs
+        )
+
+    except GitHubError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=str(exc),
+        )
+
+
+def run_task_call(
+    callable_obj,
+    *args,
+    **kwargs
+):
+    try:
+        return callable_obj(
+            *args,
+            **kwargs
+        )
+
+    except TaskError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        )
+
+
+async def safe_call(
+    source_name,
+    callable_obj,
+    *args,
+    **kwargs
+):
+    try:
+        result = await callable_obj(
+            *args,
+            **kwargs
+        )
 
         return {
             "source": source_name,
@@ -112,24 +234,18 @@ async def safe_call(source_name, callable_obj, *args, **kwargs):
             "data": None,
             "error": str(exc),
         }
-    
-async def run_github_call(callable_obj, *args, **kwargs):
 
-    try:
-        return await callable_obj(*args, **kwargs)
 
-    except GitHubError as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=str(exc),
-        )
+# =========================================================
+# BASIC HEALTH
+# =========================================================
 
 @app.get("/")
 async def root():
     return {
         "service": "WadadliTech Chief of Staff API",
         "status": "online",
-        "version": "1.2.0",
+        "version": "2.1.0",
     }
 
 
@@ -138,17 +254,339 @@ async def health():
     return {
         "status": "ok",
         "service": "wadadlitech-cos-api",
-        "version": "1.2.0",
+        "version": "2.1.0",
     }
 
 
-@app.get("/highlevel/status")
-async def highlevel_status(
-    authenticated: bool = Security(verify_api_key),
-):
-    result = await run_highlevel_call(get_location)
+# =========================================================
+# HIGHLEVEL ACCOUNT REGISTRY
+# =========================================================
 
-    location = result.get("location", result)
+@app.get("/highlevel/accounts")
+async def highlevel_accounts(
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return get_registered_accounts()
+
+
+# =========================================================
+# HIGHLEVEL ACCOUNT STATUS
+# =========================================================
+
+@app.get(
+    "/highlevel/accounts/{account_key}/status"
+)
+async def highlevel_account_status(
+    account_key: str,
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    result = await run_highlevel_call(
+        get_location,
+        account_key,
+    )
+
+    location = result.get(
+        "location",
+        result,
+    )
+
+    return {
+        "account_key": account_key,
+        "connected": True,
+        "location_id": location.get("id"),
+        "location_name": location.get("name"),
+        "timezone": location.get("timezone"),
+    }
+
+
+# =========================================================
+# HIGHLEVEL SUMMARY BY ACCOUNT
+# =========================================================
+
+@app.get(
+    "/highlevel/accounts/{account_key}/summary"
+)
+async def highlevel_account_summary(
+    account_key: str,
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return await run_highlevel_call(
+        get_account_summary,
+        account_key,
+    )
+
+
+# =========================================================
+# HIGHLEVEL CONTACTS
+# =========================================================
+
+@app.get(
+    "/highlevel/accounts/{account_key}/contacts"
+)
+async def highlevel_contacts(
+    account_key: str,
+    limit: int = Query(
+        default=20,
+        ge=1,
+        le=100,
+    ),
+    query: Optional[str] = Query(
+        default=None
+    ),
+    cursor: Optional[str] = Query(
+        default=None
+    ),
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return await run_highlevel_call(
+        search_contacts,
+        account_key,
+        limit,
+        query,
+        cursor,
+    )
+
+
+# =========================================================
+# HIGHLEVEL OPPORTUNITIES
+# =========================================================
+
+@app.get(
+    "/highlevel/accounts/{account_key}/opportunities"
+)
+async def highlevel_opportunities(
+    account_key: str,
+    limit: int = Query(
+        default=20,
+        ge=1,
+        le=100,
+    ),
+    query: Optional[str] = Query(
+        default=None
+    ),
+    status: Optional[str] = Query(
+        default=None
+    ),
+    start_after: Optional[int] = Query(
+        default=None
+    ),
+    start_after_id: Optional[str] = Query(
+        default=None
+    ),
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return await run_highlevel_call(
+        search_opportunities,
+        account_key,
+        limit,
+        query,
+        status,
+        start_after,
+        start_after_id,
+    )
+
+
+# =========================================================
+# HIGHLEVEL PIPELINES
+# =========================================================
+
+@app.get(
+    "/highlevel/accounts/{account_key}/pipelines"
+)
+async def highlevel_pipelines(
+    account_key: str,
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return await run_highlevel_call(
+        get_pipelines,
+        account_key,
+    )
+
+
+# =========================================================
+# HIGHLEVEL WORKFLOWS
+# =========================================================
+
+@app.get(
+    "/highlevel/accounts/{account_key}/workflows"
+)
+async def highlevel_workflows(
+    account_key: str,
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return await run_highlevel_call(
+        get_workflows,
+        account_key,
+    )
+
+
+# =========================================================
+# HIGHLEVEL TAGS
+# =========================================================
+
+@app.get(
+    "/highlevel/accounts/{account_key}/tags"
+)
+async def highlevel_tags(
+    account_key: str,
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return await run_highlevel_call(
+        get_tags,
+        account_key,
+    )
+
+
+# =========================================================
+# HIGHLEVEL CONVERSATIONS
+# =========================================================
+
+@app.get(
+    "/highlevel/accounts/{account_key}/conversations"
+)
+async def highlevel_conversations(
+    account_key: str,
+    limit: int = Query(
+        default=20,
+        ge=1,
+        le=100,
+    ),
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return await run_highlevel_call(
+        get_conversations,
+        account_key,
+        limit,
+    )
+
+
+# =========================================================
+# HIGHLEVEL AI AGENTS
+# =========================================================
+
+@app.get(
+    "/highlevel/accounts/{account_key}/agents"
+)
+async def highlevel_agents(
+    account_key: str,
+    limit: int = Query(
+        default=50,
+        ge=1,
+        le=100,
+    ),
+    offset: int = Query(
+        default=0,
+        ge=0,
+    ),
+    published_only: bool = Query(
+        default=False
+    ),
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return await run_highlevel_call(
+        get_agent_studio_agents,
+        account_key,
+        limit,
+        offset,
+        published_only,
+    )
+
+
+# =========================================================
+# ALL HIGHLEVEL ACCOUNTS SUMMARY
+# =========================================================
+
+@app.get(
+    "/highlevel/all-accounts-summary"
+)
+async def highlevel_all_accounts_summary(
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    account_keys = [
+        "wadadlitech",
+        "paradigm",
+        "jermaingordon",
+    ]
+
+    results = await asyncio.gather(
+        *[
+            safe_call(
+                account_key,
+                get_account_summary,
+                account_key,
+            )
+            for account_key
+            in account_keys
+        ]
+    )
+
+    accounts = []
+
+    for result in results:
+        if result["available"]:
+            accounts.append(
+                {
+                    "account_key": result["source"],
+                    "available": True,
+                    "data": result["data"],
+                }
+            )
+        else:
+            accounts.append(
+                {
+                    "account_key": result["source"],
+                    "available": False,
+                    "error": result["error"],
+                }
+            )
+
+    return {
+        "account_count": len(accounts),
+        "accounts": accounts,
+    }
+
+
+# =========================================================
+# BACKWARD-COMPATIBILITY HIGHLEVEL ROUTES
+# =========================================================
+
+@app.get("/highlevel/status")
+async def legacy_highlevel_status(
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    result = await run_highlevel_call(
+        get_location,
+        "wadadlitech",
+    )
+
+    location = result.get(
+        "location",
+        result,
+    )
 
     return {
         "connected": True,
@@ -158,90 +596,123 @@ async def highlevel_status(
     }
 
 
-@app.get("/highlevel/pipelines")
-async def highlevel_pipelines(
-    authenticated: bool = Security(verify_api_key),
-):
-    return await run_highlevel_call(get_pipelines)
-
-
-@app.get("/highlevel/workflows")
-async def highlevel_workflows(
-    authenticated: bool = Security(verify_api_key),
-):
-    return await run_highlevel_call(get_workflows)
-
-
-@app.get("/highlevel/tags")
-async def highlevel_tags(
-    authenticated: bool = Security(verify_api_key),
-):
-    return await run_highlevel_call(get_tags)
-
-
-@app.get("/highlevel/conversations")
-async def highlevel_conversations(
-    limit: int = Query(default=20, ge=1, le=100),
-    authenticated: bool = Security(verify_api_key),
-):
-    return await run_highlevel_call(
-        get_conversations,
-        limit,
-    )
-
-
 @app.get("/highlevel/contacts")
-async def highlevel_contacts(
-    limit: int = Query(default=20, ge=1, le=100),
-    query: Optional[str] = Query(default=None),
-    authenticated: bool = Security(verify_api_key),
+async def legacy_highlevel_contacts(
+    limit: int = Query(
+        default=20,
+        ge=1,
+        le=100,
+    ),
+    query: Optional[str] = Query(
+        default=None
+    ),
+    authenticated: bool = Security(
+        verify_api_key
+    ),
 ):
     return await run_highlevel_call(
         search_contacts,
+        "wadadlitech",
         limit,
         query,
     )
 
 
 @app.get("/highlevel/opportunities")
-async def highlevel_opportunities(
-    limit: int = Query(default=20, ge=1, le=100),
-    query: Optional[str] = Query(default=None),
-    status: Optional[str] = Query(default=None),
-    authenticated: bool = Security(verify_api_key),
+async def legacy_highlevel_opportunities(
+    limit: int = Query(
+        default=20,
+        ge=1,
+        le=100,
+    ),
+    query: Optional[str] = Query(
+        default=None
+    ),
+    status: Optional[str] = Query(
+        default=None
+    ),
+    authenticated: bool = Security(
+        verify_api_key
+    ),
 ):
     return await run_highlevel_call(
         search_opportunities,
+        "wadadlitech",
         limit,
         query,
         status,
     )
 
 
+@app.get("/highlevel/pipelines")
+async def legacy_highlevel_pipelines(
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return await run_highlevel_call(
+        get_pipelines,
+        "wadadlitech",
+    )
+
+
+@app.get("/highlevel/workflows")
+async def legacy_highlevel_workflows(
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return await run_highlevel_call(
+        get_workflows,
+        "wadadlitech",
+    )
+
+
 @app.get("/highlevel/agents")
-async def highlevel_agents(
-    limit: int = Query(default=50, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
-    published_only: bool = Query(default=False),
-    authenticated: bool = Security(verify_api_key),
+async def legacy_highlevel_agents(
+    limit: int = Query(
+        default=50,
+        ge=1,
+        le=100,
+    ),
+    offset: int = Query(
+        default=0,
+        ge=0,
+    ),
+    published_only: bool = Query(
+        default=False
+    ),
+    authenticated: bool = Security(
+        verify_api_key
+    ),
 ):
     return await run_highlevel_call(
         get_agent_studio_agents,
+        "wadadlitech",
         limit,
         offset,
         published_only,
     )
 
+
+# =========================================================
+# GITHUB
+# =========================================================
+
 @app.get("/github/projects")
 async def github_projects(
-    authenticated: bool = Security(verify_api_key),
+    authenticated: bool = Security(
+        verify_api_key
+    ),
 ):
     return get_registered_projects()
 
 
 @app.get("/github/activity")
 async def github_activity(
-    authenticated: bool = Security(verify_api_key),
+    authenticated: bool = Security(
+        verify_api_key
+    ),
 ):
     return await run_github_call(
         get_active_project_activity
@@ -251,7 +722,9 @@ async def github_activity(
 @app.get("/github/projects/{project_key}")
 async def github_project(
     project_key: str,
-    authenticated: bool = Security(verify_api_key),
+    authenticated: bool = Security(
+        verify_api_key
+    ),
 ):
     return await run_github_call(
         get_project_summary,
@@ -259,10 +732,14 @@ async def github_project(
     )
 
 
-@app.get("/github/projects/{project_key}/repository")
+@app.get(
+    "/github/projects/{project_key}/repository"
+)
 async def github_repository(
     project_key: str,
-    authenticated: bool = Security(verify_api_key),
+    authenticated: bool = Security(
+        verify_api_key
+    ),
 ):
     return await run_github_call(
         get_repository,
@@ -270,11 +747,19 @@ async def github_repository(
     )
 
 
-@app.get("/github/projects/{project_key}/commits")
+@app.get(
+    "/github/projects/{project_key}/commits"
+)
 async def github_commits(
     project_key: str,
-    limit: int = Query(default=10, ge=1, le=100),
-    authenticated: bool = Security(verify_api_key),
+    limit: int = Query(
+        default=10,
+        ge=1,
+        le=100,
+    ),
+    authenticated: bool = Security(
+        verify_api_key
+    ),
 ):
     return await run_github_call(
         get_commits,
@@ -283,11 +768,19 @@ async def github_commits(
     )
 
 
-@app.get("/github/projects/{project_key}/issues")
+@app.get(
+    "/github/projects/{project_key}/issues"
+)
 async def github_issues(
     project_key: str,
-    limit: int = Query(default=20, ge=1, le=100),
-    authenticated: bool = Security(verify_api_key),
+    limit: int = Query(
+        default=20,
+        ge=1,
+        le=100,
+    ),
+    authenticated: bool = Security(
+        verify_api_key
+    ),
 ):
     return await run_github_call(
         get_issues,
@@ -296,11 +789,19 @@ async def github_issues(
     )
 
 
-@app.get("/github/projects/{project_key}/pulls")
+@app.get(
+    "/github/projects/{project_key}/pulls"
+)
 async def github_pull_requests(
     project_key: str,
-    limit: int = Query(default=20, ge=1, le=100),
-    authenticated: bool = Security(verify_api_key),
+    limit: int = Query(
+        default=20,
+        ge=1,
+        le=100,
+    ),
+    authenticated: bool = Security(
+        verify_api_key
+    ),
 ):
     return await run_github_call(
         get_pull_requests,
@@ -308,49 +809,252 @@ async def github_pull_requests(
         limit,
     )
 
+
+@app.get(
+    "/github/projects/{project_key}/branches"
+)
+async def github_branches(
+    project_key: str,
+    limit: int = Query(
+        default=50,
+        ge=1,
+        le=100,
+    ),
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return await run_github_call(
+        get_branches,
+        project_key,
+        limit,
+    )
+
+
+# =========================================================
+# TASK REGISTRY
+# =========================================================
+
+@app.post("/tasks")
+async def api_create_task(
+    request: TaskCreateRequest,
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return run_task_call(
+        create_task,
+        title=request.title,
+        description=request.description,
+        department=request.department,
+        project=request.project,
+        client=request.client,
+        owner=request.owner,
+        priority=request.priority,
+        due_date=request.due_date,
+        next_action=request.next_action,
+        blocker=request.blocker,
+        source=request.source,
+    )
+
+
+@app.get("/tasks")
+async def api_get_tasks(
+    status: Optional[str] = Query(
+        default=None
+    ),
+    priority: Optional[str] = Query(
+        default=None
+    ),
+    department: Optional[str] = Query(
+        default=None
+    ),
+    project: Optional[str] = Query(
+        default=None
+    ),
+    client: Optional[str] = Query(
+        default=None
+    ),
+    limit: int = Query(
+        default=100,
+        ge=1,
+        le=500,
+    ),
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return run_task_call(
+        get_tasks,
+        status,
+        priority,
+        department,
+        project,
+        client,
+        limit,
+    )
+
+
+@app.get("/tasks/today")
+async def api_today_tasks(
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return run_task_call(
+        get_today_tasks
+    )
+
+
+@app.get("/tasks/overdue")
+async def api_overdue_tasks(
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return run_task_call(
+        get_overdue_tasks
+    )
+
+
+@app.get("/tasks/priorities")
+async def api_priority_tasks(
+    limit: int = Query(
+        default=10,
+        ge=1,
+        le=100,
+    ),
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return run_task_call(
+        get_priority_tasks,
+        limit,
+    )
+
+
+@app.get("/tasks/{task_id}")
+async def api_get_task(
+    task_id: int,
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return run_task_call(
+        get_task,
+        task_id,
+    )
+
+
+@app.patch("/tasks/{task_id}")
+async def api_update_task(
+    task_id: int,
+    request: TaskUpdateRequest,
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return run_task_call(
+        update_task,
+        task_id,
+        title=request.title,
+        description=request.description,
+        department=request.department,
+        project=request.project,
+        client=request.client,
+        owner=request.owner,
+        priority=request.priority,
+        status=request.status,
+        due_date=request.due_date,
+        next_action=request.next_action,
+        blocker=request.blocker,
+    )
+
+
+@app.post("/tasks/{task_id}/complete")
+async def api_complete_task(
+    task_id: int,
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return run_task_call(
+        complete_task,
+        task_id,
+    )
+
+
+@app.delete("/tasks/{task_id}")
+async def api_delete_task(
+    task_id: int,
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return run_task_call(
+        delete_task,
+        task_id,
+    )
+
+
+# =========================================================
+# MASTER EXECUTIVE SUMMARY
+# =========================================================
+
 @app.get("/executive-summary")
 async def executive_summary(
-    authenticated: bool = Security(verify_api_key),
+    authenticated: bool = Security(
+        verify_api_key
+    ),
 ):
+    generated_at = datetime.now(
+        timezone.utc
+    ).isoformat()
 
-    generated_at = datetime.now(timezone.utc).isoformat()
+    # ---------------------------------------------
+    # Task data
+    # ---------------------------------------------
 
-    # Run independent system queries concurrently.
+    priority_tasks = run_task_call(
+        get_priority_tasks,
+        10,
+    )
+
+    today_tasks = run_task_call(
+        get_today_tasks
+    )
+
+    overdue_tasks = run_task_call(
+        get_overdue_tasks
+    )
+
+    # ---------------------------------------------
+    # Run external systems concurrently
+    # ---------------------------------------------
+
     results = await asyncio.gather(
+
         safe_call(
-            "highlevel_location",
-            get_location,
+            "wadadlitech",
+            get_account_summary,
+            "wadadlitech",
         ),
+
         safe_call(
-            "highlevel_pipelines",
-            get_pipelines,
+            "paradigm",
+            get_account_summary,
+            "paradigm",
         ),
+
         safe_call(
-            "highlevel_workflows",
-            get_workflows,
+            "jermaingordon",
+            get_account_summary,
+            "jermaingordon",
         ),
+
         safe_call(
-            "highlevel_contacts",
-            search_contacts,
-            20,
-            None,
-        ),
-        safe_call(
-            "highlevel_opportunities",
-            search_opportunities,
-            100,
-            None,
-            None,
-        ),
-        safe_call(
-            "highlevel_agents",
-            get_agent_studio_agents,
-            100,
-            0,
-            False,
-        ),
-        safe_call(
-            "github_activity",
+            "github",
             get_active_project_activity,
         ),
     )
@@ -360,329 +1064,187 @@ async def executive_summary(
         for item in results
     }
 
-    #
-    # HIGHLEVEL
-    #
+    # ---------------------------------------------
+    # Build CRM account data
+    # ---------------------------------------------
 
-    location_result = result_map["highlevel_location"]
-    pipelines_result = result_map["highlevel_pipelines"]
-    workflows_result = result_map["highlevel_workflows"]
-    contacts_result = result_map["highlevel_contacts"]
-    opportunities_result = result_map["highlevel_opportunities"]
-    agents_result = result_map["highlevel_agents"]
+    crm_accounts = {}
 
-    location_data = {}
+    for account_key in [
+        "wadadlitech",
+        "paradigm",
+        "jermaingordon",
+    ]:
+        result = result_map[
+            account_key
+        ]
 
-    if location_result["available"]:
-        raw_location = location_result["data"]
-        location_data = raw_location.get(
-            "location",
-            raw_location,
-        )
-
-    pipeline_list = []
-
-    if pipelines_result["available"]:
-        pipeline_list = pipelines_result["data"].get(
-            "pipelines",
-            [],
-        )
-
-    workflow_list = []
-
-    if workflows_result["available"]:
-        workflow_list = workflows_result["data"].get(
-            "workflows",
-            [],
-        )
-
-    contact_list = []
-    contact_total = None
-
-    if contacts_result["available"]:
-        raw_contacts = contacts_result["data"]
-
-        contact_list = raw_contacts.get(
-            "contacts",
-            [],
-        )
-
-        contact_total = (
-            raw_contacts.get("total")
-            or raw_contacts.get("count")
-            or len(contact_list)
-        )
-
-    opportunity_list = []
-
-    if opportunities_result["available"]:
-        opportunity_list = opportunities_result[
-            "data"
-        ].get(
-            "opportunities",
-            [],
-        )
-
-    agent_list = []
-
-    if agents_result["available"]:
-        raw_agents = agents_result["data"]
-
-        agent_list = (
-            raw_agents.get("agents")
-            or raw_agents.get("data")
-            or []
-        )
-
-    #
-    # OPPORTUNITY ANALYSIS
-    #
-
-    open_opportunities = []
-    won_opportunities = []
-    lost_opportunities = []
-
-    for opportunity in opportunity_list:
-
-        status = str(
-            opportunity.get("status", "")
-        ).lower()
-
-        if status == "won":
-            won_opportunities.append(opportunity)
-
-        elif status in (
-            "lost",
-            "abandoned",
-        ):
-            lost_opportunities.append(opportunity)
+        if result["available"]:
+            crm_accounts[
+                account_key
+            ] = {
+                "available": True,
+                "data": result[
+                    "data"
+                ],
+            }
 
         else:
-            open_opportunities.append(opportunity)
+            crm_accounts[
+                account_key
+            ] = {
+                "available": False,
+                "error": result[
+                    "error"
+                ],
+            }
 
-    open_pipeline_value = sum(
-        float(
-            opportunity.get("monetaryValue")
-            or 0
-        )
-        for opportunity in open_opportunities
-    )
-
-    #
-    # GITHUB
-    #
+    # ---------------------------------------------
+    # Engineering
+    # ---------------------------------------------
 
     github_result = result_map[
-        "github_activity"
+        "github"
     ]
 
-    engineering_projects = []
+    engineering = {
+        "available": github_result[
+            "available"
+        ]
+    }
 
     if github_result["available"]:
-
-        engineering_projects = (
-            github_result["data"].get(
-                "active_projects",
-                [],
-            )
+        engineering["data"] = (
+            github_result["data"]
+        )
+    else:
+        engineering["error"] = (
+            github_result["error"]
         )
 
-    engineering_summary = []
-
-    engineering_alerts = []
-
-    for project_entry in engineering_projects:
-
-        project_name = project_entry.get(
-            "project"
-        )
-
-        project_status = project_entry.get(
-            "status"
-        )
-
-        if project_status != "AVAILABLE":
-
-            engineering_alerts.append(
-                {
-                    "project": project_name,
-                    "severity": "P2",
-                    "message": (
-                        "Engineering data unavailable "
-                        "for {}".format(
-                            project_name
-                        )
-                    ),
-                }
-            )
-
-            continue
-
-        data = project_entry.get(
-            "data",
-            {},
-        )
-
-        latest_commit = data.get(
-            "latest_commit"
-        )
-
-        engineering_summary.append(
-            {
-                "project": project_name,
-                "business_status": data.get(
-                    "business_status"
-                ),
-                "deployment": data.get(
-                    "deployment"
-                ),
-                "repository": data.get(
-                    "repository"
-                ),
-                "default_branch": data.get(
-                    "default_branch"
-                ),
-                "latest_commit": latest_commit,
-                "open_issues": data.get(
-                    "open_issues"
-                ),
-                "open_pull_requests": data.get(
-                    "open_pull_requests"
-                ),
-                "pushed_at": data.get(
-                    "pushed_at"
-                ),
-            }
-        )
-
-    #
-    # BUSINESS ALERTS
-    #
+    # ---------------------------------------------
+    # Alerts
+    # ---------------------------------------------
 
     alerts = []
 
-    if not location_result["available"]:
-        alerts.append(
-            {
-                "severity": "P1",
-                "area": "HighLevel",
-                "message": (
-                    "HighLevel connection is unavailable."
-                ),
-            }
-        )
+    for account_key in [
+        "wadadlitech",
+        "paradigm",
+        "jermaingordon",
+    ]:
+        account = crm_accounts[
+            account_key
+        ]
 
-    if opportunities_result["available"]:
-
-        if len(open_opportunities) > 0:
-
+        if not account[
+            "available"
+        ]:
             alerts.append(
                 {
-                    "severity": "P3",
-                    "area": "Sales",
+                    "severity": "P2",
+                    "area": "CRM",
+                    "account": account_key,
                     "message": (
-                        "{} open CRM opportunities "
-                        "require monitoring.".format(
-                            len(
-                                open_opportunities
-                            )
+                        "HighLevel data is "
+                        "unavailable for {}."
+                        .format(
+                            account_key
                         )
                     ),
                 }
             )
 
-    else:
-
+    if not engineering[
+        "available"
+    ]:
         alerts.append(
             {
                 "severity": "P2",
-                "area": "Sales",
+                "area": "Engineering",
                 "message": (
-                    "CRM opportunity data "
-                    "could not be retrieved."
+                    "GitHub engineering "
+                    "data is unavailable."
                 ),
             }
         )
 
-    for alert in engineering_alerts:
+    if overdue_tasks["count"] > 0:
         alerts.append(
             {
-                "severity": alert[
-                    "severity"
-                ],
-                "area": "Engineering",
-                "message": alert[
-                    "message"
-                ],
+                "severity": "P2",
+                "area": "Tasks",
+                "message": (
+                    "{} WadadliTech task(s) "
+                    "are overdue."
+                    .format(
+                        overdue_tasks[
+                            "count"
+                        ]
+                    )
+                ),
             }
         )
 
-    #
-    # CURRENT EXECUTIVE PRIORITIES
-    #
+    # ---------------------------------------------
+    # Current executive priorities
+    # ---------------------------------------------
 
-    current_priorities = [
+    priorities = [
         {
             "rank": 1,
             "priority": (
-                "Get the WadadliTech "
-                "Chief of Staff operational."
+                "Operate and refine "
+                "the WadadliTech "
+                "Chief of Staff."
             ),
             "status": "ACTIVE",
         },
+
         {
             "rank": 2,
             "priority": (
-                "Complete active Paradigm "
-                "Homecare client deliverables."
+                "Complete active "
+                "Paradigm Homecare "
+                "client deliverables."
             ),
             "status": "ACTIVE",
         },
+
         {
             "rank": 3,
             "priority": (
-                "Prepare the CRM environment "
-                "for additional WadadliTech clients."
+                "Prepare the CRM "
+                "environment for "
+                "additional clients."
             ),
             "status": "ACTIVE",
         },
+
         {
             "rank": 4,
             "priority": (
-                "Resolve hosting reliability "
-                "and replacement strategy."
+                "Resolve hosting "
+                "reliability and "
+                "replacement strategy."
             ),
             "status": "ACTIVE",
         },
+
         {
             "rank": 5,
             "priority": (
                 "Continue active "
-                "CowrieLedger development."
+                "CowrieLedger "
+                "development."
             ),
             "status": "ACTIVE",
         },
     ]
 
-    #
-    # SOURCE HEALTH
-    #
-
-    source_health = {
-        item["source"]: {
-            "available": item[
-                "available"
-            ],
-            "error": item[
-                "error"
-            ],
-        }
-        for item in results
-    }
-
-    #
-    # FINAL EXECUTIVE PAYLOAD
-    #
+    # ---------------------------------------------
+    # Final payload
+    # ---------------------------------------------
 
     return {
         "company": (
@@ -693,267 +1255,84 @@ async def executive_summary(
         "generated_at": generated_at,
 
         "executive_priorities": (
-            current_priorities
+            priorities
         ),
 
         "alerts": alerts,
 
+        "tasks": {
+            "priority": (
+                priority_tasks
+            ),
+            "today": (
+                today_tasks
+            ),
+            "overdue": (
+                overdue_tasks
+            ),
+        },
+
         "crm": {
-
-            "location": {
-                "id": location_data.get(
-                    "id"
-                ),
-                "name": location_data.get(
-                    "name"
-                ),
-                "timezone": (
-                    location_data.get(
-                        "timezone"
-                    )
-                ),
-            },
-
-            "contacts": {
-                "total": contact_total,
-                "sample_returned": len(
-                    contact_list
-                ),
-            },
-
-            "pipelines": {
-                "count": len(
-                    pipeline_list
-                ),
-                "items": [
-                    {
-                        "id": pipeline.get(
-                            "id"
-                        ),
-                        "name": pipeline.get(
-                            "name"
-                        ),
-                    }
-                    for pipeline
-                    in pipeline_list
-                ],
-            },
-
-            "opportunities": {
-                "total_returned": len(
-                    opportunity_list
-                ),
-                "open_count": len(
-                    open_opportunities
-                ),
-                "won_count": len(
-                    won_opportunities
-                ),
-                "lost_count": len(
-                    lost_opportunities
-                ),
-                "open_pipeline_value": (
-                    open_pipeline_value
-                ),
-                "open_items": [
-                    {
-                        "id": item.get(
-                            "id"
-                        ),
-                        "name": item.get(
-                            "name"
-                        ),
-                        "status": item.get(
-                            "status"
-                        ),
-                        "monetary_value": (
-                            item.get(
-                                "monetaryValue"
-                            )
-                        ),
-                        "pipeline_id": (
-                            item.get(
-                                "pipelineId"
-                            )
-                        ),
-                        "stage_id": (
-                            item.get(
-                                "pipelineStageId"
-                            )
-                        ),
-                    }
-                    for item
-                    in open_opportunities[
-                        :20
+            "internal": {
+                "wadadlitech": (
+                    crm_accounts[
+                        "wadadlitech"
                     ]
-                ],
+                )
             },
 
-            "workflows": {
-                "count": len(
-                    workflow_list
+            "clients": {
+                "paradigm": (
+                    crm_accounts[
+                        "paradigm"
+                    ]
                 ),
-                "items": [
-                    {
-                        "id": workflow.get(
-                            "id"
-                        ),
-                        "name": workflow.get(
-                            "name"
-                        ),
-                        "status": workflow.get(
-                            "status"
-                        ),
-                    }
-                    for workflow
-                    in workflow_list
-                ],
-            },
 
-            "agents": {
-                "count": len(
-                    agent_list
+                "jermaingordon": (
+                    crm_accounts[
+                        "jermaingordon"
+                    ]
                 ),
-                "items": [
-                    {
-                        "id": agent.get(
-                            "id"
-                        ),
-                        "name": agent.get(
-                            "name"
-                        ),
-                        "status": agent.get(
-                            "status"
-                        ),
-                    }
-                    for agent
-                    in agent_list
-                ],
             },
         },
 
-        "engineering": {
-            "active_project_count": len(
-                engineering_summary
-            ),
-            "projects": (
-                engineering_summary
-            ),
-        },
-
-        "source_health": (
-            source_health
+        "engineering": (
+            engineering
         ),
-    }
-@app.get("/github/projects/{project_key}/branches")
-async def github_branches(
-    project_key: str,
-    limit: int = Query(default=50, ge=1, le=100),
-    authenticated: bool = Security(verify_api_key),
-):
-    return await run_github_call(
-        get_branches,
-        project_key,
-        limit,
-    )
-@app.get("/highlevel/executive-summary")
-async def highlevel_executive_summary(
-    authenticated: bool = Security(verify_api_key),
-):
-    location = await run_highlevel_call(get_location)
-    pipelines = await run_highlevel_call(get_pipelines)
-    workflows = await run_highlevel_call(get_workflows)
-    contacts = await run_highlevel_call(
-        search_contacts,
-        10,
-        None,
-    )
-    opportunities = await run_highlevel_call(
-        search_opportunities,
-        50,
-        None,
-        None,
-    )
-    agents = await run_highlevel_call(
-        get_agent_studio_agents,
-        50,
-        0,
-        False,
-    )
 
-    location_data = location.get("location", location)
-
-    contact_list = contacts.get("contacts", [])
-    opportunity_list = opportunities.get("opportunities", [])
-    pipeline_list = pipelines.get("pipelines", [])
-    workflow_list = workflows.get("workflows", [])
-
-    agent_list = (
-        agents.get("agents")
-        or agents.get("data")
-        or []
-    )
-
-    open_opportunities = [
-        opp
-        for opp in opportunity_list
-        if str(opp.get("status", "")).lower()
-        not in ("won", "lost", "abandoned")
-    ]
-
-    total_pipeline_value = sum(
-        float(opp.get("monetaryValue") or 0)
-        for opp in open_opportunities
-    )
-
-    return {
-        "location": {
-            "id": location_data.get("id"),
-            "name": location_data.get("name"),
-            "timezone": location_data.get("timezone"),
-        },
-        "contacts": {
-            "returned": len(contact_list),
-            "reported_total": (
-                contacts.get("total")
-                or contacts.get("count")
+        "source_health": {
+            "wadadlitech": (
+                result_map[
+                    "wadadlitech"
+                ][
+                    "available"
+                ]
             ),
-        },
-        "pipelines": {
-            "count": len(pipeline_list),
-            "items": [
-                {
-                    "id": pipeline.get("id"),
-                    "name": pipeline.get("name"),
-                }
-                for pipeline in pipeline_list
-            ],
-        },
-        "opportunities": {
-            "returned": len(opportunity_list),
-            "open_count": len(open_opportunities),
-            "open_value": total_pipeline_value,
-        },
-        "workflows": {
-            "count": len(workflow_list),
-            "items": [
-                {
-                    "id": workflow.get("id"),
-                    "name": workflow.get("name"),
-                    "status": workflow.get("status"),
-                }
-                for workflow in workflow_list
-            ],
-        },
-        "agents": {
-            "count": len(agent_list),
-            "items": [
-                {
-                    "id": agent.get("id"),
-                    "name": agent.get("name"),
-                    "status": agent.get("status"),
-                }
-                for agent in agent_list
-            ],
+
+            "paradigm": (
+                result_map[
+                    "paradigm"
+                ][
+                    "available"
+                ]
+            ),
+
+            "jermaingordon": (
+                result_map[
+                    "jermaingordon"
+                ][
+                    "available"
+                ]
+            ),
+
+            "github": (
+                result_map[
+                    "github"
+                ][
+                    "available"
+                ]
+            ),
+
+            "tasks": True,
         },
     }
