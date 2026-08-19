@@ -1,6 +1,7 @@
 import os
 import asyncio
 
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -62,6 +63,17 @@ from services.github import (
 from services.google import (
     GoogleError,
     get_google_status,
+    get_google_integration_status,
+    log_google_startup_diagnostics,
+    check_gmail_connection,
+    check_calendar_connection,
+    check_drive_connection,
+    search_gmail_messages,
+    get_gmail_message,
+    search_calendar_events,
+    search_drive_files,
+    get_drive_file,
+    get_drive_file_content,
 )
 
 from config.agents import (
@@ -92,6 +104,12 @@ COS_API_KEY = os.getenv("COS_API_KEY")
 # FASTAPI
 # =========================================================
 
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    log_google_startup_diagnostics()
+    yield
+
+
 app = FastAPI(
     title="WadadliTech Chief of Staff API",
     description=(
@@ -99,6 +117,7 @@ app = FastAPI(
         "and WadadliTech business systems."
     ),
     version="2.2.0",
+    lifespan=_lifespan,
 )
 
 
@@ -791,7 +810,7 @@ async def legacy_highlevel_agents(
 # GOOGLE
 # =========================================================
 
-@app.get("/google/status")
+@app.get("/google/status", operation_id="getGoogleStatus")
 async def google_status(
     authenticated: bool = Security(
         verify_api_key
@@ -800,6 +819,173 @@ async def google_status(
     return await run_google_call(
         get_google_status
     )
+
+
+@app.get(
+    "/google/gmail/messages",
+    operation_id="searchGmailMessages",
+)
+async def api_search_gmail_messages(
+    query: Optional[str] = Query(
+        default=None,
+        description=(
+            "Gmail search syntax, e.g. 'from:someone@example.com is:unread'."
+        ),
+    ),
+    limit: int = Query(default=10, ge=1, le=50),
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return await run_google_call(
+        search_gmail_messages,
+        query,
+        limit,
+    )
+
+
+@app.get(
+    "/google/gmail/messages/{message_id}",
+    operation_id="getGmailMessage",
+)
+async def api_get_gmail_message(
+    message_id: str,
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return await run_google_call(
+        get_gmail_message,
+        message_id,
+        "full",
+    )
+
+
+@app.get(
+    "/google/calendar/events",
+    operation_id="listCalendarEvents",
+)
+async def api_list_calendar_events(
+    query: Optional[str] = Query(default=None),
+    limit: int = Query(default=10, ge=1, le=50),
+    calendar_id: str = Query(default="primary"),
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return await run_google_call(
+        search_calendar_events,
+        calendar_id,
+        query,
+        limit,
+    )
+
+
+@app.get(
+    "/google/drive/files",
+    operation_id="searchDriveFiles",
+)
+async def api_search_drive_files(
+    query: Optional[str] = Query(
+        default=None,
+        description="Free-text search across accessible Drive file contents.",
+    ),
+    limit: int = Query(default=10, ge=1, le=50),
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return await run_google_call(
+        search_drive_files,
+        query,
+        limit,
+    )
+
+
+@app.get(
+    "/google/drive/files/{file_id}",
+    operation_id="getDriveFileMetadata",
+)
+async def api_get_drive_file(
+    file_id: str,
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return await run_google_call(
+        get_drive_file,
+        file_id,
+    )
+
+
+@app.get(
+    "/google/drive/files/{file_id}/content",
+    operation_id="getDriveFileContent",
+)
+async def api_get_drive_file_content(
+    file_id: str,
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return await run_google_call(
+        get_drive_file_content,
+        file_id,
+    )
+
+
+# =========================================================
+# GOOGLE INTEGRATION DIAGNOSTICS
+# =========================================================
+
+@app.get(
+    "/integrations/google/status",
+    operation_id="getGoogleIntegrationStatus",
+)
+async def integrations_google_status(
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return {
+        "google": await get_google_integration_status()
+    }
+
+
+@app.get(
+    "/integrations/google/gmail/test",
+    operation_id="testGoogleGmailConnection",
+)
+async def integrations_google_gmail_test(
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return {"gmail": await check_gmail_connection()}
+
+
+@app.get(
+    "/integrations/google/calendar/test",
+    operation_id="testGoogleCalendarConnection",
+)
+async def integrations_google_calendar_test(
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return {"calendar": await check_calendar_connection()}
+
+
+@app.get(
+    "/integrations/google/drive/test",
+    operation_id="testGoogleDriveConnection",
+)
+async def integrations_google_drive_test(
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return {"drive": await check_drive_connection()}
 
 
 # =========================================================

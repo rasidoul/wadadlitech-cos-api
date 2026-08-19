@@ -2,8 +2,12 @@
 
 Opens a browser for Google consent, catches the OAuth callback on
 http://localhost:8000/auth/google/callback (already a registered redirect
-URI), exchanges the code for tokens, then calls the Gmail and Calendar APIs
-to confirm access.
+URI), exchanges the code for tokens, then calls the Gmail, Calendar, and
+Drive APIs to confirm access.
+
+Re-run this script (and update GOOGLE_REFRESH_TOKEN locally and on Render)
+any time the requested SCOPES below change, since Google only grants the
+scopes that were present when the refresh token was issued.
 
 Usage: python scripts/test_google_connection.py
 """
@@ -25,6 +29,7 @@ REDIRECT_URI = "http://localhost:8000/auth/google/callback"
 SCOPES = " ".join([
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/calendar.readonly",
+    "https://www.googleapis.com/auth/drive.readonly",
 ])
 
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -124,9 +129,15 @@ def main():
         "https://www.googleapis.com/calendar/v3/users/me/calendarList",
         headers=headers,
     )
+    drive_resp = httpx.get(
+        "https://www.googleapis.com/drive/v3/files",
+        params={"pageSize": 1, "fields": "files(id,name)"},
+        headers=headers,
+    )
 
     print("\nGmail profile:", gmail_resp.status_code, gmail_resp.json() if gmail_resp.is_success else gmail_resp.text)
     print("Calendar list:", calendar_resp.status_code, calendar_resp.json() if calendar_resp.is_success else calendar_resp.text)
+    print("Drive files:", drive_resp.status_code, drive_resp.json() if drive_resp.is_success else drive_resp.text)
 
     if refresh_token:
         print(f"\nRefresh token (save to .env as GOOGLE_REFRESH_TOKEN):\n{refresh_token}")
