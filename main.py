@@ -58,6 +58,11 @@ from services.github import (
     get_active_project_activity,
 )
 
+from services.google import (
+    GoogleError,
+    get_google_status,
+)
+
 
 load_dotenv()
 
@@ -184,6 +189,24 @@ async def run_github_call(
         )
 
     except GitHubError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=str(exc),
+        )
+
+
+async def run_google_call(
+    callable_obj,
+    *args,
+    **kwargs
+):
+    try:
+        return await callable_obj(
+            *args,
+            **kwargs
+        )
+
+    except GoogleError as exc:
         raise HTTPException(
             status_code=502,
             detail=str(exc),
@@ -692,6 +715,21 @@ async def legacy_highlevel_agents(
         limit,
         offset,
         published_only,
+    )
+
+
+# =========================================================
+# GOOGLE
+# =========================================================
+
+@app.get("/google/status")
+async def google_status(
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return await run_google_call(
+        get_google_status
     )
 
 
