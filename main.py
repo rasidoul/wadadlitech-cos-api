@@ -2,13 +2,14 @@ import os
 import asyncio
 
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
 from fastapi import (
     FastAPI,
+    Header,
     HTTPException,
     Query,
     Security,
@@ -63,6 +64,24 @@ from services.google import (
     get_google_status,
 )
 
+from config.agents import (
+    get_registered_agents,
+    get_agent,
+    get_webhook_env_var,
+)
+
+from services.agent_briefs import (
+    AgentBriefError,
+    create_brief,
+    get_brief,
+    list_briefs,
+    update_brief_fields,
+    acknowledge_brief,
+    complete_brief,
+    retry_delivery,
+    get_brief_stats,
+)
+
 
 load_dotenv()
 
@@ -79,7 +98,7 @@ app = FastAPI(
         "Secure middleware between WD-AI-001 "
         "and WadadliTech business systems."
     ),
-    version="2.1.0",
+    version="2.2.0",
 )
 
 
@@ -113,6 +132,33 @@ class TaskUpdateRequest(BaseModel):
     due_date: Optional[str] = None
     next_action: Optional[str] = None
     blocker: Optional[str] = None
+
+
+class AgentBriefCreateRequest(BaseModel):
+    title: str
+    summary: Optional[str] = None
+    brief_type: str = "INTELLIGENCE_BRIEF"
+    source_agent_id: str = "WD-AI-001"
+    priority: str = "NORMAL"
+    reporting_period_start: Optional[str] = None
+    reporting_period_end: Optional[str] = None
+    sections: List[Dict[str, Any]]
+    practical_move: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
+    requires_human_approval: bool = False
+    metadata: Optional[Dict[str, Any]] = None
+    external_reference: Optional[str] = None
+
+
+class AgentBriefUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    summary: Optional[str] = None
+    priority: Optional[str] = None
+    status: Optional[str] = None
+    practical_move: Optional[str] = None
+    tags: Optional[List[str]] = None
+    requires_human_approval: Optional[bool] = None
+    metadata: Optional[Dict[str, Any]] = None
 
 
 # =========================================================
@@ -231,6 +277,29 @@ def run_task_call(
         )
 
 
+async def run_agent_brief_call(
+    callable_obj,
+    *args,
+    **kwargs
+):
+    try:
+        result = callable_obj(
+            *args,
+            **kwargs
+        )
+
+        if asyncio.iscoroutine(result):
+            result = await result
+
+        return result
+
+    except AgentBriefError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=str(exc),
+        )
+
+
 async def safe_call(
     source_name,
     callable_obj,
@@ -268,7 +337,7 @@ async def root():
     return {
         "service": "WadadliTech Chief of Staff API",
         "status": "online",
-        "version": "2.1.0",
+        "version": "2.2.0",
     }
 
 
@@ -277,7 +346,7 @@ async def health():
     return {
         "status": "ok",
         "service": "wadadlitech-cos-api",
-        "version": "2.1.0",
+        "version": "2.2.0",
     }
 
 
@@ -1037,6 +1106,260 @@ async def api_delete_task(
 
 
 # =========================================================
+# AGENT REGISTRY
+# =========================================================
+
+def _require_registered_agent(agent_id: str) -> Dict[str, Any]:
+
+    agent = get_agent(agent_id)
+
+    if not agent:
+        raise HTTPException(
+            status_code=404,
+            detail="Unknown agent '{}'.".format(agent_id),
+        )
+
+    return agent
+
+
+@app.get("/agents", operation_id="listAgents")
+async def api_list_agents(
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return get_registered_agents()
+
+
+@app.get("/agents/{agent_id}", operation_id="getAgent")
+async def api_get_agent(
+    agent_id: str,
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return _require_registered_agent(agent_id)
+
+
+@app.get("/agents/{agent_id}/status", operation_id="getAgentStatus")
+async def api_get_agent_status(
+    agent_id: str,
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    agent = _require_registered_agent(agent_id)
+
+    stats = await run_agent_brief_call(
+        get_brief_stats,
+        agent_id,
+    )
+
+    env_var = get_webhook_env_var(agent_id)
+
+    webhook_configured = bool(
+        os.getenv(env_var)
+    ) if env_var else False
+
+    return {
+        "agent_id": agent_id,
+        "registered": True,
+        "status": agent["status"],
+        "brief_queue_available": True,
+        "webhook_configured": webhook_configured,
+        "pending_briefs": stats["pending_briefs"],
+        "failed_deliveries": stats["delivery_failures"],
+    }
+
+
+# =========================================================
+# AGENT BRIEFS
+# =========================================================
+
+@app.post(
+    "/agents/{agent_id}/briefs",
+    status_code=201,
+    operation_id="createAgentBrief",
+)
+async def api_create_agent_brief(
+    agent_id: str,
+    request: AgentBriefCreateRequest,
+    idempotency_key: Optional[str] = Header(
+        default=None,
+        alias="Idempotency-Key",
+    ),
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    agent = _require_registered_agent(agent_id)
+
+    resolved_idempotency_key = (
+        idempotency_key or request.external_reference
+    )
+
+    brief = await run_agent_brief_call(
+        create_brief,
+        agent_id=agent_id,
+        source_agent_id=request.source_agent_id,
+        title=request.title,
+        summary=request.summary,
+        brief_type=request.brief_type,
+        priority=request.priority,
+        reporting_period_start=request.reporting_period_start,
+        reporting_period_end=request.reporting_period_end,
+        sections=request.sections,
+        practical_move=request.practical_move,
+        tags=request.tags,
+        requires_human_approval=request.requires_human_approval,
+        metadata=request.metadata,
+        idempotency_key=resolved_idempotency_key,
+    )
+
+    return {
+        "success": True,
+        "brief_id": brief["id"],
+        "agent_id": agent_id,
+        "status": brief["status"],
+        "delivery_status": brief["delivery_status"],
+        "created_at": brief["created_at"],
+        "message": "Brief accepted for {}.".format(agent["name"]),
+    }
+
+
+@app.get(
+    "/agents/{agent_id}/briefs",
+    operation_id="listAgentBriefs",
+)
+async def api_list_agent_briefs(
+    agent_id: str,
+    status: Optional[str] = Query(default=None),
+    brief_type: Optional[str] = Query(default=None),
+    priority: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    _require_registered_agent(agent_id)
+
+    return await run_agent_brief_call(
+        list_briefs,
+        agent_id=agent_id,
+        status=status,
+        brief_type=brief_type,
+        priority=priority,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get(
+    "/agents/{agent_id}/briefs/{brief_id}",
+    operation_id="getAgentBrief",
+)
+async def api_get_agent_brief(
+    agent_id: str,
+    brief_id: int,
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    _require_registered_agent(agent_id)
+
+    return await run_agent_brief_call(
+        get_brief,
+        agent_id=agent_id,
+        brief_id=brief_id,
+    )
+
+
+@app.patch(
+    "/agents/{agent_id}/briefs/{brief_id}",
+    operation_id="updateAgentBrief",
+)
+async def api_update_agent_brief(
+    agent_id: str,
+    brief_id: int,
+    request: AgentBriefUpdateRequest,
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    _require_registered_agent(agent_id)
+
+    updates = request.model_dump(exclude_unset=True)
+
+    return await run_agent_brief_call(
+        update_brief_fields,
+        agent_id=agent_id,
+        brief_id=brief_id,
+        **updates,
+    )
+
+
+@app.post(
+    "/agents/{agent_id}/briefs/{brief_id}/acknowledge",
+    operation_id="acknowledgeAgentBrief",
+)
+async def api_acknowledge_agent_brief(
+    agent_id: str,
+    brief_id: int,
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    _require_registered_agent(agent_id)
+
+    return await run_agent_brief_call(
+        acknowledge_brief,
+        agent_id=agent_id,
+        brief_id=brief_id,
+    )
+
+
+@app.post(
+    "/agents/{agent_id}/briefs/{brief_id}/complete",
+    operation_id="completeAgentBrief",
+)
+async def api_complete_agent_brief(
+    agent_id: str,
+    brief_id: int,
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    _require_registered_agent(agent_id)
+
+    return await run_agent_brief_call(
+        complete_brief,
+        agent_id=agent_id,
+        brief_id=brief_id,
+    )
+
+
+@app.post(
+    "/agents/{agent_id}/briefs/{brief_id}/retry-delivery",
+    operation_id="retryAgentBriefDelivery",
+)
+async def api_retry_agent_brief_delivery(
+    agent_id: str,
+    brief_id: int,
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    _require_registered_agent(agent_id)
+
+    return await run_agent_brief_call(
+        retry_delivery,
+        agent_id=agent_id,
+        brief_id=brief_id,
+    )
+
+
+# =========================================================
 # MASTER EXECUTIVE SUMMARY
 # =========================================================
 
@@ -1225,6 +1548,63 @@ async def executive_summary(
         )
 
     # ---------------------------------------------
+    # Agent operations (Maya briefs)
+    # ---------------------------------------------
+
+    maya_stats = get_brief_stats(
+        "MAYA-WD-MKT-001"
+    )
+
+    maya_webhook_env_var = get_webhook_env_var(
+        "MAYA-WD-MKT-001"
+    )
+
+    maya_webhook_configured = bool(
+        os.getenv(maya_webhook_env_var)
+    ) if maya_webhook_env_var else False
+
+    agent_operations = {
+        "maya": {
+            "agent_id": "MAYA-WD-MKT-001",
+            "pending_briefs": maya_stats[
+                "pending_briefs"
+            ],
+            "delivery_failures": maya_stats[
+                "delivery_failures"
+            ],
+            "acknowledged_briefs": maya_stats[
+                "acknowledged_briefs"
+            ],
+            "completed_briefs": maya_stats[
+                "completed_briefs"
+            ],
+            "latest_brief": maya_stats[
+                "latest_brief"
+            ],
+            "webhook_configured": (
+                maya_webhook_configured
+            ),
+        },
+    }
+
+    if maya_stats["delivery_failures"] > 0:
+        alerts.append(
+            {
+                "severity": "P2",
+                "area": "Agent Operations",
+                "message": (
+                    "{} brief(s) failed "
+                    "delivery to Maya."
+                    .format(
+                        maya_stats[
+                            "delivery_failures"
+                        ]
+                    )
+                ),
+            }
+        )
+
+    # ---------------------------------------------
     # Current executive priorities
     # ---------------------------------------------
 
@@ -1336,6 +1716,10 @@ async def executive_summary(
 
         "engineering": (
             engineering
+        ),
+
+        "agent_operations": (
+            agent_operations
         ),
 
         "source_health": {
