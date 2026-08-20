@@ -1631,6 +1631,11 @@ async def executive_summary(
                 account_key
             ] = {
                 "available": True,
+                # Additive: HEALTHY/DEGRADED: a failed resource (e.g.
+                # contacts) no longer flips the whole account to unavailable.
+                "status": result["data"].get(
+                    "status", "HEALTHY"
+                ),
                 "data": result[
                     "data"
                 ],
@@ -1641,6 +1646,7 @@ async def executive_summary(
                 account_key
             ] = {
                 "available": False,
+                "status": "UNAVAILABLE",
                 "error": result[
                     "error"
                 ],
@@ -1697,6 +1703,30 @@ async def executive_summary(
                         "unavailable for {}."
                         .format(
                             account_key
+                        )
+                    ),
+                }
+            )
+
+        elif account.get("status") == "DEGRADED":
+            failed_resources = list(
+                (
+                    account["data"].get("errors")
+                    or {}
+                ).keys()
+            )
+            alerts.append(
+                {
+                    "severity": "P3",
+                    "area": "CRM",
+                    "account": account_key,
+                    "message": (
+                        "HighLevel account '{}' is degraded: "
+                        "{} resource(s) failed ({})."
+                        .format(
+                            account_key,
+                            len(failed_resources),
+                            ", ".join(failed_resources),
                         )
                     ),
                 }
@@ -1942,5 +1972,22 @@ async def executive_summary(
             ),
 
             "tasks": True,
+        },
+
+        # Additive detail alongside the boolean source_health above:
+        # distinguishes a fully healthy account from one that is
+        # available but DEGRADED (a partial resource failure).
+        "source_health_status": {
+            "wadadlitech": crm_accounts[
+                "wadadlitech"
+            ]["status"],
+
+            "paradigm": crm_accounts[
+                "paradigm"
+            ]["status"],
+
+            "jermaingordon": crm_accounts[
+                "jermaingordon"
+            ]["status"],
         },
     }

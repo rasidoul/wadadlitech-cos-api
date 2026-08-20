@@ -20,3 +20,15 @@ os.environ["AGENT_BRIEFS_DB_PATH"] = os.path.join(
 
 # Ensure the webhook starts "not configured" unless a test opts in.
 os.environ.pop("MAYA_WD_WEBHOOK_URL", None)
+
+# Fake HighLevel credentials so tests never depend on (or use) real
+# tokens from a developer's local .env file. python-dotenv's load_dotenv()
+# does not override variables already present in the environment, so
+# these take precedence once set here.
+os.environ.setdefault("HIGHLEVEL_WADADLITECH_TOKEN", "test-wadadlitech-token")
+os.environ.setdefault("HIGHLEVEL_WADADLITECH_LOCATION_ID", "test-wadadlitech-location")
+os.environ.setdefault("HIGHLEVEL_PARADIGM_TOKEN", "test-paradigm-token")
+os.environ.setdefault("HIGHLEVEL_PARADIGM_LOCATION_ID", "test-paradigm-location")
+os.environ.setdefault("HIGHLEVEL_JERMAINGORDON_TOKEN", "test-jermaingordon-token")
+os.environ.setdefault("HIGHLEVEL_JERMAINGORDON_LOCATION_ID", "test-jermaingordon-location")
+
