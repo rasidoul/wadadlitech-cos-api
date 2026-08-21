@@ -17,7 +17,9 @@ TRADEHUB_BASE_URL = os.getenv(
     "https://tradehub-7l1b.onrender.com",
 ).rstrip("/")
 
-TRADEHUB_COS_API_KEY = os.getenv("TRADEHUB_COS_API_KEY")
+TRADEHUB_COS_API_KEY = os.getenv(
+    "TRADEHUB_COS_API_KEY", ""
+).strip()
 
 TRADEHUB_TIMEOUT_SECONDS = float(
     os.getenv("TRADEHUB_TIMEOUT_SECONDS", "15")
