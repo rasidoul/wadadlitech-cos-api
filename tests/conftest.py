@@ -32,3 +32,11 @@ os.environ.setdefault("HIGHLEVEL_PARADIGM_LOCATION_ID", "test-paradigm-location"
 os.environ.setdefault("HIGHLEVEL_JERMAINGORDON_TOKEN", "test-jermaingordon-token")
 os.environ.setdefault("HIGHLEVEL_JERMAINGORDON_LOCATION_ID", "test-jermaingordon-location")
 
+# Fake TradeHub credentials so tests never depend on a real deployed
+# TradeHub instance or a developer's local .env file.
+os.environ.setdefault("TRADEHUB_BASE_URL", "https://tradehub.test")
+os.environ.setdefault("TRADEHUB_COS_API_KEY", "test-tradehub-cos-api-key")
+os.environ.setdefault("TRADEHUB_TIMEOUT_SECONDS", "15")
+os.environ.setdefault("COS_TRADEHUB_LIVE_EXECUTION_ENABLED", "false")
+
+

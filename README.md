@@ -221,12 +221,112 @@ Google Drive integration configured: YES
 If any variable is missing, a `WARNING: <VAR_NAME> is not configured. Google
 services will be unavailable.` line is logged instead.
 
+## TradeHub Integration
+
+[services/tradehub.py](services/tradehub.py) is the trusted COS client for the
+deployed TradeHub Chief of Staff API (`https://tradehub-7l1b.onrender.com`,
+configurable via `TRADEHUB_BASE_URL`). It follows the same pattern as the
+GitHub/HighLevel clients: a single module owns the base URL, Bearer auth,
+timeouts, JSON decoding, and error handling — route handlers never call
+`httpx` directly.
+
+Every request sends `Authorization: Bearer <TRADEHUB_COS_API_KEY>`, which
+must match TradeHub's own `COS_API_KEY`. The client raises `TradeHubError`
+(with subclasses `TradeHubTimeoutError`, `TradeHubApprovalError`) for missing
+configuration, network errors, HTTP errors, invalid JSON, and TradeHub's
+`success: false` envelope — never leaking the API key or raw stack traces.
+
+### Endpoints
+
+| Method | Path | operation_id | Purpose |
+|---|---|---|---|
+| GET | `/tradehub/status` | `getTradeHubStatus` | app/database/runtime health |
+| GET | `/tradehub/accounts` | `getTradeHubAccounts` | demo/live account summaries |
+| GET | `/tradehub/open-trades` | `getTradeHubOpenTrades` | open trades (`account_type`, `instrument`, `broker`) |
+| GET | `/tradehub/trades` | `getTradeHubTradeHistory` | trade history (`period`, `instrument`, `account_type`, `broker`, `limit`) |
+| GET | `/tradehub/performance` | `getTradeHubPerformance` | daily/weekly/monthly/all performance (authoritative — never recalculated here) |
+| GET | `/tradehub/runtime` | `getTradeHubRuntime` | desired vs. actual auto-trading worker state |
+| GET | `/tradehub/actions` | `getTradeHubActions` | COS-originated action history (`period`, `action_type`, `execution_status`, `limit`) |
+| POST | `/tradehub/trade-request` | `requestTradeHubTrade` | **financial execution** — requires `approval_confirmed: true` |
+| POST | `/tradehub/close-request` | `requestTradeHubClose` | **financial execution** — requires `approval_confirmed: true` |
+| GET | `/integrations/tradehub/status` | `getTradeHubIntegrationStatus` | sanitized configured/reachable/authenticated/healthy report |
+
+All require the standard `COS_API_KEY` Bearer token, same as every other COS
+endpoint.
+
+### Read-only vs. financial execution
+
+WD-AI-001 may autonomously call every `GET` endpoint above (`READ_ONLY`).
+`requestTradeHubTrade` and `requestTradeHubClose` are `FINANCIAL_EXECUTION`
+and always require `approval_confirmed: true` in the request body — this is
+never inferred from the presence of a user message.
+
+### Demo vs. live safety gates
+
+`COS_TRADEHUB_LIVE_EXECUTION_ENABLED` (default `false`) is an independent
+COS-side gate. A request with `account_type: "live"` is rejected unless
+both `approval_confirmed: true` **and** `COS_TRADEHUB_LIVE_EXECUTION_ENABLED=true`
+are set. TradeHub separately enforces its own `ALLOW_LIVE_TRADING` /
+`COS_LIVE_TRADE_EXECUTION_ENABLED` — this is defense in depth, not a
+replacement.
+
+### Request IDs and reconciliation
+
+`request_tradehub_trade()` / `request_tradehub_close()` generate
+`wd-cos-trade-<uuid>` / `wd-cos-close-<uuid>` request IDs (or accept a
+caller-supplied one, e.g. for a reconciliation retry). On an ambiguous
+timeout (`TradeHubTimeoutError`), the original `request_id` is preserved on
+the exception — the COS API never mints a replacement ID and resends, since
+the broker action may have already occurred. Call
+`reconcile_action_by_request_id(request_id)` (backed by
+`GET /tradehub/actions`) to determine the actual outcome before deciding
+what to report or do next.
+
+### Source of truth
+
+For trading data, TradeHub's live API is authoritative. This client never
+recalculates performance — GitHub activity must never be used to infer
+trading performance.
+
+### Executive summary integration
+
+The `trading` section of `GET /executive-summary` calls
+`get_tradehub_executive_summary()`, which never raises — a TradeHub outage
+degrades that one section instead of failing the whole briefing. It reports
+service health, runtime (desired vs. actual), today's realized/unrealized
+P/L, and open trade count, and only elevates alerts for significant issues
+(e.g. auto-trader configured but not running, or TradeHub unavailable).
+Routine profitable/loss activity does not generate an alert.
+`source_health.tradehub` (bool) and `source_health_status.tradehub`
+(`HEALTHY`/`DEGRADED`/`UNAVAILABLE`) are also exposed alongside the existing
+CRM/GitHub health fields.
+
+> Field names read from TradeHub's runtime/performance responses use
+> defensive fallbacks (multiple possible key names) since this client was
+> built without access to the TradeHub repository. Verify field names
+> against TradeHub's actual response shape once connectivity is confirmed
+> in Render, and adjust `get_tradehub_executive_summary()` if needed.
+
+### Verifying connectivity
+
+`scripts/test_tradehub_connection.py` is an opt-in script (never run
+automatically) that calls the real `GET /api/cos/status` endpoint using the
+configured environment variables and never prints the Bearer token:
+
+```bash
+python scripts/test_tradehub_connection.py
+```
+
 ## Environment variables
 
 See [.env.example](.env.example) for the full list. New for this release:
 
 ```
 MAYA_WD_WEBHOOK_URL=
+TRADEHUB_BASE_URL=https://tradehub-7l1b.onrender.com
+TRADEHUB_COS_API_KEY=
+TRADEHUB_TIMEOUT_SECONDS=15
+COS_TRADEHUB_LIVE_EXECUTION_ENABLED=false
 ```
 
 ## Local testing
@@ -298,5 +398,16 @@ GOOGLE_REFRESH_TOKEN
 **Agent briefs**
 ```
 MAYA_WD_WEBHOOK_URL
+```
+
+**TradeHub** — `TRADEHUB_COS_API_KEY` must match the shared secret set as
+`COS_API_KEY` on the TradeHub Render service. Keep
+`COS_TRADEHUB_LIVE_EXECUTION_ENABLED` set to `false` until live execution is
+a deliberate, reviewed decision.
+```
+TRADEHUB_BASE_URL
+TRADEHUB_COS_API_KEY
+TRADEHUB_TIMEOUT_SECONDS
+COS_TRADEHUB_LIVE_EXECUTION_ENABLED
 ```
 

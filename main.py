@@ -94,6 +94,23 @@ from services.agent_briefs import (
     get_brief_stats,
 )
 
+from services.tradehub import (
+    TradeHubError,
+    TradeHubTimeoutError,
+    TradeHubApprovalError,
+    get_tradehub_status,
+    get_tradehub_accounts,
+    get_tradehub_open_trades,
+    get_tradehub_trades,
+    get_tradehub_performance,
+    get_tradehub_runtime,
+    get_tradehub_actions,
+    request_tradehub_trade,
+    request_tradehub_close,
+    get_tradehub_integration_status,
+    get_tradehub_executive_summary,
+)
+
 
 load_dotenv()
 
@@ -178,6 +195,34 @@ class AgentBriefUpdateRequest(BaseModel):
     tags: Optional[List[str]] = None
     requires_human_approval: Optional[bool] = None
     metadata: Optional[Dict[str, Any]] = None
+
+
+class TradeHubTradeRequest(BaseModel):
+    account_type: str
+    instrument: str
+    side: str
+    size: Optional[float] = None
+    risk: Optional[Dict[str, Any]] = None
+    stop_loss: Optional[float] = None
+    take_profit: Optional[float] = None
+    reason: Optional[str] = None
+    requested_by: str = "WD-AI-001"
+    source: str = "COS"
+    approval_confirmed: bool = False
+    request_id: Optional[str] = None
+
+
+class TradeHubCloseRequest(BaseModel):
+    broker: str
+    account_type: str
+    trade_id: str
+    close_type: str = "full"
+    size: Optional[float] = None
+    reason: Optional[str] = None
+    requested_by: str = "WD-AI-001"
+    source: str = "COS"
+    approval_confirmed: bool = False
+    request_id: Optional[str] = None
 
 
 # =========================================================
@@ -272,6 +317,40 @@ async def run_google_call(
         )
 
     except GoogleError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=str(exc),
+        )
+
+
+async def run_tradehub_call(
+    callable_obj,
+    *args,
+    **kwargs
+):
+    try:
+        return await callable_obj(
+            *args,
+            **kwargs
+        )
+
+    except TradeHubApprovalError as exc:
+        raise HTTPException(
+            status_code=403,
+            detail=str(exc),
+        )
+
+    except TradeHubTimeoutError as exc:
+        raise HTTPException(
+            status_code=504,
+            detail=(
+                "TradeHub request timed out for request_id '{}'. The action "
+                "may already have been applied - check /tradehub/actions "
+                "before retrying.".format(exc.request_id)
+            ),
+        )
+
+    except TradeHubError as exc:
         raise HTTPException(
             status_code=502,
             detail=str(exc),
@@ -1125,6 +1204,187 @@ async def github_branches(
 
 
 # =========================================================
+# TRADEHUB (read-only monitoring)
+# =========================================================
+
+@app.get("/tradehub/status", operation_id="getTradeHubStatus")
+async def tradehub_status(
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return await run_tradehub_call(
+        get_tradehub_status
+    )
+
+
+@app.get("/tradehub/accounts", operation_id="getTradeHubAccounts")
+async def tradehub_accounts(
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return await run_tradehub_call(
+        get_tradehub_accounts
+    )
+
+
+@app.get("/tradehub/open-trades", operation_id="getTradeHubOpenTrades")
+async def tradehub_open_trades(
+    account_type: Optional[str] = Query(default=None),
+    instrument: Optional[str] = Query(default=None),
+    broker: Optional[str] = Query(default=None),
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return await run_tradehub_call(
+        get_tradehub_open_trades,
+        account_type,
+        instrument,
+        broker,
+    )
+
+
+@app.get("/tradehub/trades", operation_id="getTradeHubTradeHistory")
+async def tradehub_trades(
+    period: Optional[str] = Query(default=None),
+    instrument: Optional[str] = Query(default=None),
+    account_type: Optional[str] = Query(default=None),
+    broker: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return await run_tradehub_call(
+        get_tradehub_trades,
+        period,
+        instrument,
+        account_type,
+        broker,
+        limit,
+    )
+
+
+@app.get("/tradehub/performance", operation_id="getTradeHubPerformance")
+async def tradehub_performance(
+    period: str = Query(default="all"),
+    instrument: Optional[str] = Query(default=None),
+    account_type: Optional[str] = Query(default=None),
+    broker: Optional[str] = Query(default=None),
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return await run_tradehub_call(
+        get_tradehub_performance,
+        period,
+        instrument,
+        account_type,
+        broker,
+    )
+
+
+@app.get("/tradehub/runtime", operation_id="getTradeHubRuntime")
+async def tradehub_runtime(
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return await run_tradehub_call(
+        get_tradehub_runtime
+    )
+
+
+@app.get("/tradehub/actions", operation_id="getTradeHubActions")
+async def tradehub_actions(
+    period: Optional[str] = Query(default=None),
+    action_type: Optional[str] = Query(default=None),
+    execution_status: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return await run_tradehub_call(
+        get_tradehub_actions,
+        period,
+        action_type,
+        execution_status,
+        limit,
+    )
+
+
+# =========================================================
+# TRADEHUB (financial execution - approval-controlled)
+# =========================================================
+
+@app.post("/tradehub/trade-request", operation_id="requestTradeHubTrade")
+async def tradehub_trade_request(
+    request: TradeHubTradeRequest,
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return await run_tradehub_call(
+        request_tradehub_trade,
+        account_type=request.account_type,
+        instrument=request.instrument,
+        side=request.side,
+        size=request.size,
+        risk=request.risk,
+        stop_loss=request.stop_loss,
+        take_profit=request.take_profit,
+        reason=request.reason,
+        requested_by=request.requested_by,
+        source=request.source,
+        approval_confirmed=request.approval_confirmed,
+        request_id=request.request_id,
+    )
+
+
+@app.post("/tradehub/close-request", operation_id="requestTradeHubClose")
+async def tradehub_close_request(
+    request: TradeHubCloseRequest,
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return await run_tradehub_call(
+        request_tradehub_close,
+        broker=request.broker,
+        account_type=request.account_type,
+        trade_id=request.trade_id,
+        close_type=request.close_type,
+        size=request.size,
+        reason=request.reason,
+        requested_by=request.requested_by,
+        source=request.source,
+        approval_confirmed=request.approval_confirmed,
+        request_id=request.request_id,
+    )
+
+
+# =========================================================
+# TRADEHUB INTEGRATION DIAGNOSTICS
+# =========================================================
+
+@app.get(
+    "/integrations/tradehub/status",
+    operation_id="getTradeHubIntegrationStatus",
+)
+async def integrations_tradehub_status(
+    authenticated: bool = Security(
+        verify_api_key
+    ),
+):
+    return {
+        "tradehub": await get_tradehub_integration_status()
+    }
+
+
+# =========================================================
 # TASK REGISTRY
 # =========================================================
 
@@ -1604,6 +1864,11 @@ async def executive_summary(
             "github",
             get_active_project_activity,
         ),
+
+        safe_call(
+            "tradehub",
+            get_tradehub_executive_summary,
+        ),
     )
 
     result_map = {
@@ -1676,6 +1941,41 @@ async def executive_summary(
         )
 
     # ---------------------------------------------
+    # Trading (TradeHub)
+    # ---------------------------------------------
+
+    tradehub_result = result_map[
+        "tradehub"
+    ]
+
+    # get_tradehub_executive_summary() never raises - it reports its own
+    # available/status - so unwrap that inner state rather than relying on
+    # safe_call()'s outer "available" (which only reflects whether the
+    # coroutine itself raised).
+    if tradehub_result["available"]:
+        tradehub_data = tradehub_result[
+            "data"
+        ]
+
+        trading = {
+            "available": tradehub_data.get(
+                "available", False
+            ),
+            "status": tradehub_data.get(
+                "status", "UNAVAILABLE"
+            ),
+            "data": tradehub_data,
+        }
+    else:
+        trading = {
+            "available": False,
+            "status": "UNAVAILABLE",
+            "error": tradehub_result[
+                "error"
+            ],
+        }
+
+    # ---------------------------------------------
     # Alerts
     # ---------------------------------------------
 
@@ -1742,6 +2042,28 @@ async def executive_summary(
                 "message": (
                     "GitHub engineering "
                     "data is unavailable."
+                ),
+            }
+        )
+
+    # get_tradehub_executive_summary() already produces a descriptive alert
+    # (e.g. "TradeHub authentication failed", "auto-trader not running")
+    # whenever it is unavailable or degraded - reuse those rather than
+    # inventing a second, less specific message.
+    tradehub_alerts = (
+        trading.get("data") or {}
+    ).get("alerts") or []
+
+    if tradehub_alerts:
+        alerts.extend(tradehub_alerts)
+    elif not trading["available"]:
+        alerts.append(
+            {
+                "severity": "P2",
+                "area": "TradeHub",
+                "message": (
+                    trading.get("error")
+                    or "TradeHub data is unavailable."
                 ),
             }
         )
@@ -1934,6 +2256,10 @@ async def executive_summary(
             engineering
         ),
 
+        "trading": (
+            trading
+        ),
+
         "agent_operations": (
             agent_operations
         ),
@@ -1971,6 +2297,10 @@ async def executive_summary(
                 ]
             ),
 
+            "tradehub": (
+                trading["available"]
+            ),
+
             "tasks": True,
         },
 
@@ -1989,5 +2319,7 @@ async def executive_summary(
             "jermaingordon": crm_accounts[
                 "jermaingordon"
             ]["status"],
+
+            "tradehub": trading["status"],
         },
     }
