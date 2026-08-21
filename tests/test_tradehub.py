@@ -405,3 +405,51 @@ def test_executive_summary_endpoint_does_not_fail_when_tradehub_unavailable(clie
     assert body["trading"]["status"] == "UNAVAILABLE"
     assert body["source_health"]["tradehub"] is False
     assert body["source_health_status"]["tradehub"] == "UNAVAILABLE"
+
+
+# ---------------------------------------------------------------------------
+# 22: OpenAPI / connector action exposure
+# ---------------------------------------------------------------------------
+
+# operation_id -> (method, path)
+EXPECTED_TRADEHUB_OPERATIONS = {
+    "getTradeHubStatus": ("get", "/tradehub/status"),
+    "getTradeHubAccounts": ("get", "/tradehub/accounts"),
+    "getTradeHubOpenTrades": ("get", "/tradehub/open-trades"),
+    "getTradeHubTradeHistory": ("get", "/tradehub/trades"),
+    "getTradeHubPerformance": ("get", "/tradehub/performance"),
+    "getTradeHubRuntime": ("get", "/tradehub/runtime"),
+    "getTradeHubActions": ("get", "/tradehub/actions"),
+    "requestTradeHubTrade": ("post", "/tradehub/trade-request"),
+    "requestTradeHubClose": ("post", "/tradehub/close-request"),
+}
+
+
+@pytest.mark.parametrize(
+    "operation_id,method,path", [
+        (op_id, method, path)
+        for op_id, (method, path) in EXPECTED_TRADEHUB_OPERATIONS.items()
+    ]
+)
+def test_tradehub_action_appears_in_openapi_schema(client, operation_id, method, path):
+    schema = client.get("/openapi.json").json()
+
+    path_item = schema["paths"].get(path)
+    assert path_item is not None, "{} missing from OpenAPI paths".format(path)
+
+    operation = path_item.get(method)
+    assert operation is not None, "{} {} missing from OpenAPI schema".format(method.upper(), path)
+    assert operation["operationId"] == operation_id
+
+
+def test_all_nine_tradehub_actions_are_registered_as_fastapi_routes():
+    registered = {
+        (route.path, method)
+        for route in main.app.routes
+        for method in getattr(route, "methods", set())
+    }
+
+    for operation_id, (method, path) in EXPECTED_TRADEHUB_OPERATIONS.items():
+        assert (path, method.upper()) in registered, (
+            "{} ({}) is not a registered FastAPI route".format(operation_id, path)
+        )
