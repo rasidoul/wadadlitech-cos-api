@@ -48,18 +48,6 @@ from services.highlevel import (
     get_account_summary,
 )
 
-from services.github import (
-    GitHubError,
-    get_registered_projects,
-    get_repository,
-    get_commits,
-    get_issues,
-    get_pull_requests,
-    get_branches,
-    get_project_summary,
-    get_active_project_activity,
-)
-
 from services.google import (
     GoogleError,
     get_google_status,
@@ -281,24 +269,6 @@ async def run_highlevel_call(
         )
 
     except HighLevelError as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=str(exc),
-        )
-
-
-async def run_github_call(
-    callable_obj,
-    *args,
-    **kwargs
-):
-    try:
-        return await callable_obj(
-            *args,
-            **kwargs
-        )
-
-    except GitHubError as exc:
         raise HTTPException(
             status_code=502,
             detail=str(exc),
@@ -1068,138 +1038,45 @@ async def integrations_google_drive_test(
 
 
 # =========================================================
-# GITHUB
+# GITHUB (deprecated - removed)
 # =========================================================
+#
+# The COS API no longer aggregates GitHub engineering activity (repository,
+# commit, issue, pull request, and branch data). Repository access is now
+# handled exclusively by the dedicated direct GitHub connector outside this
+# API. These routes are kept only as an explicit deprecation notice for any
+# existing caller of the old paths.
 
-@app.get("/github/projects")
-async def github_projects(
-    authenticated: bool = Security(
-        verify_api_key
-    ),
-):
-    return get_registered_projects()
-
-
-@app.get("/github/activity")
-async def github_activity(
-    authenticated: bool = Security(
-        verify_api_key
-    ),
-):
-    return await run_github_call(
-        get_active_project_activity
-    )
-
-
-@app.get("/github/projects/{project_key}")
-async def github_project(
-    project_key: str,
-    authenticated: bool = Security(
-        verify_api_key
-    ),
-):
-    return await run_github_call(
-        get_project_summary,
-        project_key,
-    )
-
-
-@app.get(
-    "/github/projects/{project_key}/repository"
+GITHUB_DEPRECATION_DETAIL = (
+    "Deprecated. Engineering repository data is now accessed through the "
+    "direct GitHub connector."
 )
-async def github_repository(
-    project_key: str,
+
+
+async def _github_deprecated(
+    path: str,
     authenticated: bool = Security(
         verify_api_key
     ),
 ):
-    return await run_github_call(
-        get_repository,
-        project_key,
+    raise HTTPException(
+        status_code=410,
+        detail=GITHUB_DEPRECATION_DETAIL,
     )
 
 
-@app.get(
-    "/github/projects/{project_key}/commits"
-)
-async def github_commits(
-    project_key: str,
-    limit: int = Query(
-        default=10,
-        ge=1,
-        le=100,
-    ),
-    authenticated: bool = Security(
-        verify_api_key
-    ),
+for _method, _operation_id in (
+    ("GET", "githubDeprecatedGet"),
+    ("POST", "githubDeprecatedPost"),
+    ("PUT", "githubDeprecatedPut"),
+    ("PATCH", "githubDeprecatedPatch"),
+    ("DELETE", "githubDeprecatedDelete"),
 ):
-    return await run_github_call(
-        get_commits,
-        project_key,
-        limit,
-    )
-
-
-@app.get(
-    "/github/projects/{project_key}/issues"
-)
-async def github_issues(
-    project_key: str,
-    limit: int = Query(
-        default=20,
-        ge=1,
-        le=100,
-    ),
-    authenticated: bool = Security(
-        verify_api_key
-    ),
-):
-    return await run_github_call(
-        get_issues,
-        project_key,
-        limit,
-    )
-
-
-@app.get(
-    "/github/projects/{project_key}/pulls"
-)
-async def github_pull_requests(
-    project_key: str,
-    limit: int = Query(
-        default=20,
-        ge=1,
-        le=100,
-    ),
-    authenticated: bool = Security(
-        verify_api_key
-    ),
-):
-    return await run_github_call(
-        get_pull_requests,
-        project_key,
-        limit,
-    )
-
-
-@app.get(
-    "/github/projects/{project_key}/branches"
-)
-async def github_branches(
-    project_key: str,
-    limit: int = Query(
-        default=50,
-        ge=1,
-        le=100,
-    ),
-    authenticated: bool = Security(
-        verify_api_key
-    ),
-):
-    return await run_github_call(
-        get_branches,
-        project_key,
-        limit,
+    app.add_api_route(
+        "/github/{path:path}",
+        _github_deprecated,
+        methods=[_method],
+        operation_id=_operation_id,
     )
 
 
@@ -1861,11 +1738,6 @@ async def executive_summary(
         ),
 
         safe_call(
-            "github",
-            get_active_project_activity,
-        ),
-
-        safe_call(
             "tradehub",
             get_tradehub_executive_summary,
         ),
@@ -1916,29 +1788,6 @@ async def executive_summary(
                     "error"
                 ],
             }
-
-    # ---------------------------------------------
-    # Engineering
-    # ---------------------------------------------
-
-    github_result = result_map[
-        "github"
-    ]
-
-    engineering = {
-        "available": github_result[
-            "available"
-        ]
-    }
-
-    if github_result["available"]:
-        engineering["data"] = (
-            github_result["data"]
-        )
-    else:
-        engineering["error"] = (
-            github_result["error"]
-        )
 
     # ---------------------------------------------
     # Trading (TradeHub)
@@ -2031,20 +1880,6 @@ async def executive_summary(
                     ),
                 }
             )
-
-    if not engineering[
-        "available"
-    ]:
-        alerts.append(
-            {
-                "severity": "P2",
-                "area": "Engineering",
-                "message": (
-                    "GitHub engineering "
-                    "data is unavailable."
-                ),
-            }
-        )
 
     # get_tradehub_executive_summary() already produces a descriptive alert
     # (e.g. "TradeHub authentication failed", "auto-trader not running")
@@ -2252,9 +2087,11 @@ async def executive_summary(
             },
         },
 
-        "engineering": (
-            engineering
-        ),
+        "engineering": {
+            "available": False,
+            "status": "NOT_PROVIDED_BY_COS_API",
+            "source_of_truth": "direct_github_connector",
+        },
 
         "trading": (
             trading
@@ -2284,14 +2121,6 @@ async def executive_summary(
             "jermaingordon": (
                 result_map[
                     "jermaingordon"
-                ][
-                    "available"
-                ]
-            ),
-
-            "github": (
-                result_map[
-                    "github"
                 ][
                     "available"
                 ]

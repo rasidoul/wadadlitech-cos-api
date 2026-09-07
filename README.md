@@ -1,8 +1,14 @@
 # WadadliTech Chief of Staff API
 
 Secure middleware between the WadadliTech Chief of Staff agent (`WD-AI-001`)
-and WadadliTech business systems (HighLevel, GitHub, Google, internal task
-registry, and downstream AI agents).
+and WadadliTech business systems (HighLevel, Google, internal task registry,
+TradeHub, and downstream AI agents).
+
+GitHub repository access (repositories, commits, branches, issues, pull
+requests, and files) is handled through a dedicated **direct GitHub
+connector** outside this API, not through the WadadliTech COS API. The COS
+API no longer aggregates GitHub engineering activity; the deprecated
+`/github/...` routes now return `410 Gone`.
 
 - Base URL: `https://api.wadadlitech.com`
 - Current version: `2.2.0`
@@ -124,7 +130,7 @@ webhook URL is never included in API responses.
 [services/google.py](services/google.py) uses **OAuth 2.0 user authorization**
 (not a service account or bare API key) with a long-lived refresh token,
 requested with direct REST calls via `httpx` — the same lightweight pattern
-used for the GitHub and HighLevel integrations (no `google-api-python-client`
+used for the HighLevel integration (no `google-api-python-client`
 dependency is required).
 
 Authentication is already environment-variable based and makes no local-file
@@ -226,7 +232,7 @@ services will be unavailable.` line is logged instead.
 [services/tradehub.py](services/tradehub.py) is the trusted COS client for the
 deployed TradeHub Chief of Staff API (`https://tradehub-7l1b.onrender.com`,
 configurable via `TRADEHUB_BASE_URL`). It follows the same pattern as the
-GitHub/HighLevel clients: a single module owns the base URL, Bearer auth,
+HighLevel client: a single module owns the base URL, Bearer auth,
 timeouts, JSON decoding, and error handling — route handlers never call
 `httpx` directly.
 
@@ -285,7 +291,7 @@ what to report or do next.
 ### Source of truth
 
 For trading data, TradeHub's live API is authoritative. This client never
-recalculates performance — GitHub activity must never be used to infer
+recalculates performance — engineering activity must never be used to infer
 trading performance.
 
 ### Executive summary integration
@@ -299,7 +305,9 @@ P/L, and open trade count, and only elevates alerts for significant issues
 Routine profitable/loss activity does not generate an alert.
 `source_health.tradehub` (bool) and `source_health_status.tradehub`
 (`HEALTHY`/`DEGRADED`/`UNAVAILABLE`) are also exposed alongside the existing
-CRM/GitHub health fields.
+CRM health fields. The `engineering` section of `/executive-summary` is a
+static placeholder (`"source_of_truth": "direct_github_connector"`) since
+GitHub engineering data is no longer aggregated by the COS API.
 
 > Field names read from TradeHub's runtime/performance responses use
 > defensive fallbacks (multiple possible key names) since this client was
@@ -369,12 +377,6 @@ never committed to the repository.
 **COS**
 ```
 COS_API_KEY
-```
-
-**GitHub**
-```
-GITHUB_TOKEN
-GITHUB_OWNER
 ```
 
 **HighLevel**

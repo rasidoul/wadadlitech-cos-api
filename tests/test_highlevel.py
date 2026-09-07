@@ -331,13 +331,7 @@ def test_executive_summary_shows_degraded_not_unavailable(monkeypatch):
             "agents": {"count": 0, "items": []},
         }
 
-    async def fake_get_active_project_activity():
-        return {"projects": []}
-
     monkeypatch.setattr(main, "get_account_summary", fake_get_account_summary)
-    monkeypatch.setattr(
-        main, "get_active_project_activity", fake_get_active_project_activity
-    )
 
     test_client = TestClient(main.app)
     response = test_client.get("/executive-summary", headers=AUTH_HEADERS)

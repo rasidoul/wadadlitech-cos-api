@@ -387,14 +387,10 @@ def test_executive_summary_endpoint_does_not_fail_when_tradehub_unavailable(clie
             "agents": {"count": 0, "items": []},
         }
 
-    async def fake_get_active_project_activity():
-        return {"projects": []}
-
     from unittest.mock import patch
 
     with patch.object(main, "get_tradehub_executive_summary", fake_tradehub_summary), \
-         patch.object(main, "get_account_summary", fake_get_account_summary), \
-         patch.object(main, "get_active_project_activity", fake_get_active_project_activity):
+         patch.object(main, "get_account_summary", fake_get_account_summary):
 
         response = client.get("/executive-summary", headers=AUTH_HEADERS)
 
