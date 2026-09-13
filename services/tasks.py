@@ -1,5 +1,6 @@
 import os
 import sqlite3
+import json
 
 from datetime import datetime, date
 from typing import Any, Dict, List, Optional
@@ -19,10 +20,27 @@ DATA_DIR = os.path.join(
     "data"
 )
 
-DATABASE_PATH = os.path.join(
-    DATA_DIR,
-    "cos_tasks.db"
+# Make database path configurable; use $TMPDIR fallback for ephemeral deployments.
+# For persistent storage, set COS_DATABASE_PATH explicitly or mount persistent volume.
+DATABASE_PATH = os.getenv(
+    "COS_DATABASE_PATH",
+    os.path.join(DATA_DIR, "cos_tasks.db")
 )
+
+
+def get_database_path() -> str:
+    """Resolve the active database path at runtime so tests and env overrides work.
+
+    This avoids stale import-time config when a test sets COS_DATABASE_PATH after
+    the module was first imported.
+    """
+    db_path = os.getenv("COS_DATABASE_PATH") or DATABASE_PATH
+    if not db_path:
+        db_path = DATABASE_PATH
+
+    db_dir = os.path.dirname(db_path) or DATA_DIR
+    os.makedirs(db_dir, exist_ok=True)
+    return db_path
 
 
 class TaskError(Exception):
@@ -37,10 +55,18 @@ def _ensure_data_directory():
 
 
 def _get_connection():
+    # Ensure the schema exists before the first task operation is attempted.
+    try:
+        from services.db_migrations import run_migrations
+        run_migrations()
+    except Exception:
+        pass
+
     _ensure_data_directory()
 
+    db_path = get_database_path()
     connection = sqlite3.connect(
-        DATABASE_PATH
+        db_path
     )
 
     connection.row_factory = (
@@ -51,52 +77,10 @@ def _get_connection():
 
 
 def initialize_task_database():
-
-    connection = _get_connection()
-
-    cursor = connection.cursor()
-
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS tasks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-            title TEXT NOT NULL,
-
-            description TEXT,
-
-            department TEXT,
-
-            project TEXT,
-
-            client TEXT,
-
-            owner TEXT,
-
-            priority TEXT NOT NULL DEFAULT 'NORMAL',
-
-            status TEXT NOT NULL DEFAULT 'OPEN',
-
-            due_date TEXT,
-
-            next_action TEXT,
-
-            blocker TEXT,
-
-            source TEXT DEFAULT 'COS',
-
-            created_at TEXT NOT NULL,
-
-            updated_at TEXT NOT NULL,
-
-            completed_at TEXT
-        )
-        """
-    )
-
-    connection.commit()
-
-    connection.close()
+    """Initialize database using migration system."""
+    from services.db_migrations import run_migrations
+    
+    run_migrations()
 
 
 def _row_to_dict(
@@ -121,6 +105,23 @@ def create_task(
     next_action: Optional[str] = None,
     blocker: Optional[str] = None,
     source: str = "COS",
+    # New planning fields
+    domain: Optional[str] = None,
+    goal_links: Optional[List[str]] = None,
+    estimated_minutes: Optional[int] = None,
+    deadline: Optional[str] = None,
+    planned_work_date: Optional[str] = None,
+    dependencies: Optional[List[int]] = None,
+    waiting_for_date: Optional[str] = None,
+    postponement_count: int = 0,
+    source_system: Optional[str] = None,
+    external_id: Optional[str] = None,
+    gmail_thread_id: Optional[str] = None,
+    gmail_message_ids: Optional[List[str]] = None,
+    calendar_event_id: Optional[str] = None,
+    reminders_id: Optional[str] = None,
+    reminders_list: Optional[str] = None,
+    actual_duration_minutes: Optional[int] = None,
 ) -> Dict[str, Any]:
 
     if not title.strip():
@@ -153,6 +154,11 @@ def create_task(
 
     cursor = connection.cursor()
 
+    # Convert list fields to JSON
+    goal_links_json = json.dumps(goal_links) if goal_links else None
+    dependencies_json = json.dumps(dependencies) if dependencies else None
+    gmail_message_ids_json = json.dumps(gmail_message_ids) if gmail_message_ids else None
+
     cursor.execute(
         """
         INSERT INTO tasks (
@@ -169,9 +175,25 @@ def create_task(
             blocker,
             source,
             created_at,
-            updated_at
+            updated_at,
+            domain,
+            goal_links,
+            estimated_minutes,
+            deadline,
+            planned_work_date,
+            dependencies,
+            waiting_for_date,
+            postponement_count,
+            source_system,
+            external_id,
+            gmail_thread_id,
+            gmail_message_ids,
+            calendar_event_id,
+            reminders_id,
+            reminders_list,
+            actual_duration_minutes
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             title,
@@ -188,6 +210,22 @@ def create_task(
             source,
             now,
             now,
+            domain,
+            goal_links_json,
+            estimated_minutes,
+            deadline,
+            planned_work_date,
+            dependencies_json,
+            waiting_for_date,
+            postponement_count,
+            source_system,
+            external_id,
+            gmail_thread_id,
+            gmail_message_ids_json,
+            calendar_event_id,
+            reminders_id,
+            reminders_list,
+            actual_duration_minutes,
         ),
     )
 
@@ -336,6 +374,28 @@ def update_task(
     due_date: Optional[str] = None,
     next_action: Optional[str] = None,
     blocker: Optional[str] = None,
+    # New planning fields
+    domain: Optional[str] = None,
+    goal_links: Optional[List[str]] = None,
+    estimated_minutes: Optional[int] = None,
+    deadline: Optional[str] = None,
+    planned_work_date: Optional[str] = None,
+    dependencies: Optional[List[int]] = None,
+    waiting_for_date: Optional[str] = None,
+    postponement_count: Optional[int] = None,
+    source_system: Optional[str] = None,
+    external_id: Optional[str] = None,
+    gmail_thread_id: Optional[str] = None,
+    gmail_message_ids: Optional[List[str]] = None,
+    calendar_event_id: Optional[str] = None,
+    reminders_id: Optional[str] = None,
+    reminders_list: Optional[str] = None,
+    sync_version: Optional[int] = None,
+    pending_commands: Optional[List[Dict[str, Any]]] = None,
+    conflict_flags: Optional[List[str]] = None,
+    reminders_sync_version: Optional[int] = None,
+    reminders_last_sync: Optional[str] = None,
+    actual_duration_minutes: Optional[int] = None,
 ) -> Dict[str, Any]:
 
     existing = get_task(
@@ -356,6 +416,27 @@ def update_task(
         "due_date": due_date,
         "next_action": next_action,
         "blocker": blocker,
+        "domain": domain,
+        "goal_links": json.dumps(goal_links) if goal_links is not None else None,
+        "estimated_minutes": estimated_minutes,
+        "deadline": deadline,
+        "planned_work_date": planned_work_date,
+        "dependencies": json.dumps(dependencies) if dependencies is not None else None,
+        "waiting_for_date": waiting_for_date,
+        "postponement_count": postponement_count,
+        "source_system": source_system,
+        "external_id": external_id,
+        "gmail_thread_id": gmail_thread_id,
+        "gmail_message_ids": json.dumps(gmail_message_ids) if gmail_message_ids is not None else None,
+        "calendar_event_id": calendar_event_id,
+        "reminders_id": reminders_id,
+        "reminders_list": reminders_list,
+        "sync_version": sync_version,
+        "pending_commands": json.dumps(pending_commands) if pending_commands is not None else None,
+        "conflict_flags": json.dumps(conflict_flags) if conflict_flags is not None else None,
+        "reminders_sync_version": reminders_sync_version,
+        "reminders_last_sync": reminders_last_sync,
+        "actual_duration_minutes": actual_duration_minutes,
     }
 
     for key, value in fields.items():

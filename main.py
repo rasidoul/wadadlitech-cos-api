@@ -99,6 +99,50 @@ from services.tradehub import (
     get_tradehub_executive_summary,
 )
 
+# New services for personal/business planning
+from services.google_auth_enhanced import (
+    get_access_token,
+    get_google_integration_diagnostics,
+)
+
+from services.gmail_operations import (
+    GmailError,
+    search_messages,
+    get_message,
+    get_thread,
+    list_labels,
+    create_label,
+    apply_label,
+    remove_label,
+    archive_message,
+    create_draft,
+    update_draft,
+    send_draft,
+    get_email_context,
+)
+
+from services.calendar_operations import (
+    CalendarError,
+    list_calendars,
+    get_events,
+    check_availability,
+    create_focus_block,
+    update_focus_block,
+    cancel_focus_block,
+)
+
+from services.reminders_operations import (
+    RemindersError,
+    get_pending_sync,
+    acknowledge_sync,
+)
+
+from services.planning_operations import (
+    PlanningError,
+    get_daily_plan,
+    get_weekly_review,
+)
+
 
 load_dotenv()
 
@@ -126,6 +170,48 @@ app = FastAPI(
 )
 
 
+original_openapi = app.openapi
+
+
+def custom_openapi():
+    """Attach GPT-specific metadata to consequential actions."""
+    if app.openapi_schema:
+        return app.openapi_schema
+
+    openapi_schema = original_openapi()
+    consequential_ops = {
+        "sendGmailDraft": {
+            "x-openai-isConsequential": True,
+            "x-openai-require-approval": True,
+            "x-openai-approval-message": "This action sends an email and requires explicit user approval before execution.",
+        },
+        "createFocusBlock": {
+            "x-openai-isConsequential": True,
+            "x-openai-require-approval": True,
+            "x-openai-approval-message": "This action changes your calendar and requires explicit user approval before execution.",
+        },
+        "acknowledgeReminderSync": {
+            "x-openai-isConsequential": True,
+            "x-openai-require-approval": True,
+            "x-openai-approval-message": "This action updates reminders sync state and requires explicit user approval before execution.",
+        },
+    }
+
+    for path_item in openapi_schema.get("paths", {}).values():
+        for method, operation in path_item.items():
+            if method.lower() not in {"get", "post", "put", "patch", "delete"}:
+                continue
+            op_id = operation.get("operationId")
+            if op_id in consequential_ops:
+                operation.update(consequential_ops[op_id])
+
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
+
+
 # =========================================================
 # REQUEST MODELS
 # =========================================================
@@ -142,6 +228,22 @@ class TaskCreateRequest(BaseModel):
     next_action: Optional[str] = None
     blocker: Optional[str] = None
     source: str = "COS"
+    # Planning fields
+    domain: Optional[str] = None  # 'PERSONAL' or 'BUSINESS'
+    goal_links: Optional[List[str]] = None  # Goal/project IDs
+    estimated_minutes: Optional[int] = None
+    deadline: Optional[str] = None  # Real deadline (ISO date)
+    planned_work_date: Optional[str] = None  # Planned execution (ISO datetime)
+    dependencies: Optional[List[int]] = None  # Task IDs this depends on
+    waiting_for_date: Optional[str] = None  # Follow-up date for blockers
+    postponement_count: int = 0
+    source_system: Optional[str] = None  # gmail, calendar, reminders, etc.
+    external_id: Optional[str] = None  # Stable source system ID
+    gmail_thread_id: Optional[str] = None
+    gmail_message_ids: Optional[List[str]] = None
+    calendar_event_id: Optional[str] = None
+    reminders_id: Optional[str] = None
+    reminders_list: Optional[str] = None
 
 
 class TaskUpdateRequest(BaseModel):
@@ -156,6 +258,28 @@ class TaskUpdateRequest(BaseModel):
     due_date: Optional[str] = None
     next_action: Optional[str] = None
     blocker: Optional[str] = None
+    # Planning fields
+    domain: Optional[str] = None
+    goal_links: Optional[List[str]] = None
+    estimated_minutes: Optional[int] = None
+    deadline: Optional[str] = None
+    planned_work_date: Optional[str] = None
+    dependencies: Optional[List[int]] = None
+    waiting_for_date: Optional[str] = None
+    postponement_count: Optional[int] = None
+    source_system: Optional[str] = None
+    external_id: Optional[str] = None
+    gmail_thread_id: Optional[str] = None
+    gmail_message_ids: Optional[List[str]] = None
+    calendar_event_id: Optional[str] = None
+    reminders_id: Optional[str] = None
+    reminders_list: Optional[str] = None
+    sync_version: Optional[int] = None
+    pending_commands: Optional[List[Dict[str, Any]]] = None
+    conflict_flags: Optional[List[str]] = None
+    reminders_sync_version: Optional[int] = None
+    reminders_last_sync: Optional[str] = None
+    actual_duration_minutes: Optional[int] = None
 
 
 class AgentBriefCreateRequest(BaseModel):
@@ -872,7 +996,7 @@ async def google_status(
 
 @app.get(
     "/google/gmail/messages",
-    operation_id="searchGmailMessages",
+    operation_id="legacySearchGmailMessages",
 )
 async def api_search_gmail_messages(
     query: Optional[str] = Query(
@@ -895,7 +1019,7 @@ async def api_search_gmail_messages(
 
 @app.get(
     "/google/gmail/messages/{message_id}",
-    operation_id="getGmailMessage",
+    operation_id="legacyGetGmailMessage",
 )
 async def api_get_gmail_message(
     message_id: str,
@@ -912,7 +1036,7 @@ async def api_get_gmail_message(
 
 @app.get(
     "/google/calendar/events",
-    operation_id="listCalendarEvents",
+    operation_id="legacyListCalendarEvents",
 )
 async def api_list_calendar_events(
     query: Optional[str] = Query(default=None),
@@ -1285,6 +1409,21 @@ async def api_create_task(
         next_action=request.next_action,
         blocker=request.blocker,
         source=request.source,
+        domain=request.domain,
+        goal_links=request.goal_links,
+        estimated_minutes=request.estimated_minutes,
+        deadline=request.deadline,
+        planned_work_date=request.planned_work_date,
+        dependencies=request.dependencies,
+        waiting_for_date=request.waiting_for_date,
+        postponement_count=request.postponement_count,
+        source_system=request.source_system,
+        external_id=request.external_id,
+        gmail_thread_id=request.gmail_thread_id,
+        gmail_message_ids=request.gmail_message_ids,
+        calendar_event_id=request.calendar_event_id,
+        reminders_id=request.reminders_id,
+        reminders_list=request.reminders_list,
     )
 
 
@@ -1399,6 +1538,27 @@ async def api_update_task(
         due_date=request.due_date,
         next_action=request.next_action,
         blocker=request.blocker,
+        domain=request.domain,
+        goal_links=request.goal_links,
+        estimated_minutes=request.estimated_minutes,
+        deadline=request.deadline,
+        planned_work_date=request.planned_work_date,
+        dependencies=request.dependencies,
+        waiting_for_date=request.waiting_for_date,
+        postponement_count=request.postponement_count,
+        source_system=request.source_system,
+        external_id=request.external_id,
+        gmail_thread_id=request.gmail_thread_id,
+        gmail_message_ids=request.gmail_message_ids,
+        calendar_event_id=request.calendar_event_id,
+        reminders_id=request.reminders_id,
+        reminders_list=request.reminders_list,
+        sync_version=request.sync_version,
+        pending_commands=request.pending_commands,
+        conflict_flags=request.conflict_flags,
+        reminders_sync_version=request.reminders_sync_version,
+        reminders_last_sync=request.reminders_last_sync,
+        actual_duration_minutes=request.actual_duration_minutes,
     )
 
 
@@ -2151,4 +2311,410 @@ async def executive_summary(
 
             "tradehub": trading["status"],
         },
-    }
+    }# =========================================================
+# GMAIL OPERATIONS
+# =========================================================
+
+@app.get("/integrations/gmail/messages", operation_id="searchGmailMessages")
+async def search_gmail(
+    query: Optional[str] = Query(default=None),
+    max_results: int = Query(default=10, ge=1, le=100),
+    page_token: Optional[str] = Query(default=None),
+    authenticated: bool = Security(verify_api_key),
+):
+    """Search Gmail messages with optional query.
+    
+    Query examples:
+    - "is:request" - messages with request keyword
+    - "from:user@example.com" - from specific sender
+    - "subject:proposal" - in subject line
+    """
+    try:
+        return await search_messages(query, max_results, page_token)
+    except GmailError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.get("/integrations/gmail/messages/{message_id}", operation_id="getGmailMessage")
+async def get_gmail_msg(
+    message_id: str,
+    authenticated: bool = Security(verify_api_key),
+):
+    """Fetch a complete Gmail message."""
+    try:
+        return await get_message(message_id)
+    except GmailError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.get("/integrations/gmail/threads/{thread_id}", operation_id="getGmailThread")
+async def get_gmail_thd(
+    thread_id: str,
+    authenticated: bool = Security(verify_api_key),
+):
+    """Fetch a complete Gmail thread."""
+    try:
+        return await get_thread(thread_id)
+    except GmailError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.get("/integrations/gmail/labels", operation_id="listGmailLabels")
+async def list_gmail_labels(
+    authenticated: bool = Security(verify_api_key),
+):
+    """List all Gmail labels."""
+    try:
+        return await list_labels()
+    except GmailError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.post("/integrations/gmail/labels", operation_id="createGmailLabel")
+async def create_gmail_label(
+    name: str = Query(...),
+    authenticated: bool = Security(verify_api_key),
+):
+    """Create a new Gmail label."""
+    try:
+        return await create_label(name)
+    except GmailError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.post("/integrations/gmail/messages/{message_id}/label", operation_id="applyGmailLabel")
+async def apply_gmail_label(
+    message_id: str,
+    label_id: str = Query(...),
+    authenticated: bool = Security(verify_api_key),
+):
+    """Apply a label to a message."""
+    try:
+        return await apply_label(message_id, label_id)
+    except GmailError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.delete("/integrations/gmail/messages/{message_id}/label", operation_id="removeGmailLabel")
+async def remove_gmail_label(
+    message_id: str,
+    label_id: str = Query(...),
+    authenticated: bool = Security(verify_api_key),
+):
+    """Remove a label from a message."""
+    try:
+        return await remove_label(message_id, label_id)
+    except GmailError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.post("/integrations/gmail/messages/{message_id}/archive", operation_id="archiveGmailMessage")
+async def archive_gmail_msg(
+    message_id: str,
+    authenticated: bool = Security(verify_api_key),
+):
+    """Archive a message (remove from Inbox)."""
+    try:
+        return await archive_message(message_id)
+    except GmailError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.post("/integrations/gmail/drafts", operation_id="createGmailDraft")
+async def create_gmail_draft(
+    to: str = Query(...),
+    subject: str = Query(...),
+    body: str = Query(...),
+    thread_id: Optional[str] = Query(default=None),
+    authenticated: bool = Security(verify_api_key),
+):
+    """Create a draft message (optional reply to thread)."""
+    try:
+        return await create_draft(to, subject, body, thread_id=thread_id)
+    except GmailError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.put("/integrations/gmail/drafts/{draft_id}", operation_id="updateGmailDraft")
+async def update_gmail_draft(
+    draft_id: str,
+    to: str = Query(...),
+    subject: str = Query(...),
+    body: str = Query(...),
+    authenticated: bool = Security(verify_api_key),
+):
+    """Update an existing draft."""
+    try:
+        return await update_draft(draft_id, to, subject, body)
+    except GmailError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.post("/integrations/gmail/drafts/{draft_id}/send", operation_id="sendGmailDraft")
+async def send_gmail_draft(
+    draft_id: str,
+    approval_confirmed: bool = Query(default=False),
+    authenticated: bool = Security(verify_api_key),
+):
+    """Send a draft message. Human approval required before calling."""
+    try:
+        return await send_draft(
+            draft_id,
+            approval_confirmed=approval_confirmed,
+        )
+    except GmailError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.get("/integrations/gmail/messages/{message_id}/context", operation_id="getGmailContext")
+async def get_gmail_msg_context(
+    message_id: str,
+    authenticated: bool = Security(verify_api_key),
+):
+    """Extract context from email for task creation (sanitized)."""
+    try:
+        return await get_email_context(message_id)
+    except GmailError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+# =========================================================
+# GOOGLE CALENDAR OPERATIONS
+# =========================================================
+
+@app.get("/integrations/calendar/calendars", operation_id="listCalendars")
+async def list_cals(
+    authenticated: bool = Security(verify_api_key),
+):
+    """List accessible calendars."""
+    try:
+        return await list_calendars()
+    except CalendarError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.get("/integrations/calendar/calendars/{calendar_id}/events", operation_id="getCalendarEvents")
+async def get_calendar_evs(
+    calendar_id: str = "primary",
+    time_min: Optional[str] = Query(default=None),
+    time_max: Optional[str] = Query(default=None),
+    max_results: int = Query(default=50, ge=1, le=250),
+    page_token: Optional[str] = Query(default=None),
+    authenticated: bool = Security(verify_api_key),
+):
+    """Fetch calendar events (paginated)."""
+    try:
+        return await get_events(
+            calendar_id, time_min, time_max, max_results, page_token
+        )
+    except CalendarError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.post("/integrations/calendar/availability", operation_id="checkCalendarAvailability")
+async def check_cal_availability(
+    calendar_id: str = Query(default="primary"),
+    start_time: str = Query(...),
+    end_time: str = Query(...),
+    timezone_name: str = Query(default="America/New_York"),
+    authenticated: bool = Security(verify_api_key),
+):
+    """Check if a time slot is available (no busy events)."""
+    try:
+        return await check_availability(
+            calendar_id, start_time, end_time, timezone_name
+        )
+    except CalendarError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.post("/integrations/calendar/focus-blocks", operation_id="createFocusBlock")
+async def create_focus_blk(
+    calendar_id: str = Query(default="primary"),
+    start_time: str = Query(...),
+    end_time: str = Query(...),
+    title: Optional[str] = Query(default=None),
+    description: Optional[str] = Query(default=None),
+    timezone_name: str = Query(default="America/New_York"),
+    idempotency_key: Optional[str] = Query(default=None),
+    approval_confirmed: bool = Query(default=False),
+    authenticated: bool = Security(verify_api_key),
+):
+    """Create a COS-managed focus block on calendar."""
+    try:
+        return await create_focus_block(
+            calendar_id, start_time, end_time, title, description,
+            timezone_name, idempotency_key, approval_confirmed
+        )
+    except CalendarError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.patch("/integrations/calendar/focus-blocks/{event_id}", operation_id="updateFocusBlock")
+async def update_focus_blk(
+    event_id: str,
+    calendar_id: str = Query(default="primary"),
+    start_time: Optional[str] = Query(default=None),
+    end_time: Optional[str] = Query(default=None),
+    title: Optional[str] = Query(default=None),
+    description: Optional[str] = Query(default=None),
+    timezone_name: str = Query(default="America/New_York"),
+    authenticated: bool = Security(verify_api_key),
+):
+    """Update an existing focus block."""
+    try:
+        return await update_focus_block(
+            calendar_id, event_id, start_time, end_time, title,
+            description, timezone_name
+        )
+    except CalendarError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.delete("/integrations/calendar/focus-blocks/{event_id}", operation_id="cancelFocusBlock")
+async def cancel_focus_blk(
+    event_id: str,
+    calendar_id: str = Query(default="primary"),
+    authenticated: bool = Security(verify_api_key),
+):
+    """Cancel a focus block."""
+    try:
+        return await cancel_focus_block(calendar_id, event_id)
+    except CalendarError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+# =========================================================
+# APPLE REMINDERS SYNCHRONIZATION
+# =========================================================
+
+@app.get("/integrations/reminders/pending-sync", operation_id="getRemindersPendingSync")
+async def get_reminders_pending(
+    authorization: str = Header(...),
+    last_sync_timestamp: Optional[str] = Query(default=None),
+):
+    """Get tasks pending sync to Reminders (iPhone Shortcut endpoint).
+    
+    Authorization header: "Bearer {REMINDERS_BRIDGE_API_KEY}"
+    """
+    try:
+        # Extract key from "Bearer {key}"
+        parts = authorization.split(" ")
+        if len(parts) != 2 or parts[0] != "Bearer":
+            raise HTTPException(status_code=401, detail="Invalid authorization header")
+        
+        bridge_key = parts[1]
+        
+        result = await get_pending_sync(bridge_key, last_sync_timestamp)
+        return result
+    
+    except RemindersError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+
+
+@app.post("/integrations/reminders/acknowledge", operation_id="acknowledgeReminderSync")
+async def acknowledge_reminders(
+    authorization: str = Header(...),
+    request_body: Dict[str, List[Dict[str, Any]]] = None,
+    approval_confirmed: bool = Query(default=False),
+    authenticated: bool = Security(verify_api_key),
+):
+    """Accept Reminders sync acknowledgments (iPhone Shortcut endpoint).
+
+    Authorization header: "Bearer {REMINDERS_BRIDGE_API_KEY}"
+    Body: {"acknowledgments": [...]} 
+    """
+    try:
+        parts = authorization.split(" ")
+        if len(parts) != 2 or parts[0] != "Bearer":
+            raise HTTPException(status_code=401, detail="Invalid authorization header")
+
+        bridge_key = parts[1]
+        acknowledgments = request_body.get("acknowledgments", []) if request_body else []
+
+        result = await acknowledge_sync(
+            bridge_key,
+            acknowledgments,
+            approval_confirmed=approval_confirmed,
+        )
+        return result
+    except RemindersError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+
+# =========================================================
+# PLANNING & REVIEW
+# =========================================================
+
+@app.get("/planning/daily", operation_id="getDailyPlan")
+async def daily_plan(
+    max_outcomes: int = Query(default=3, ge=1, le=10),
+    buffer_percentage: int = Query(default=30, ge=10, le=80),
+    timezone_name: str = Query(default="America/New_York"),
+    authenticated: bool = Security(verify_api_key),
+):
+    """Get daily plan for today.
+    
+    Combines tasks, calendar, and emails to suggest 3 main outcomes.
+    Accounts for buffer time and identifies blocked tasks, conflicts, warnings.
+    """
+    try:
+        # TODO: Fetch actual tasks, calendar events from services
+        # For now, return planning structure with empty data
+        
+        plan = await get_daily_plan(
+            max_outcomes=max_outcomes,
+            buffer_percentage=buffer_percentage,
+            timezone_name=timezone_name,
+            tasks=[],
+            calendar_events=[],
+        )
+        
+        return plan
+    
+    except PlanningError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/planning/weekly-review", operation_id="getWeeklyReview")
+async def weekly_review(
+    timezone_name: str = Query(default="America/New_York"),
+    authenticated: bool = Security(verify_api_key),
+):
+    """Get weekly review report.
+    
+    Reports planned vs completed, overdue, waiting-for, active projects,
+    upcoming deadlines, and evidence-based adjustments.
+    """
+    try:
+        # TODO: Fetch actual tasks from service
+        # For now, return review structure with empty data
+        
+        review = await get_weekly_review(
+            tasks=[],
+            completed_count=0,
+            timezone_name=timezone_name,
+        )
+        
+        return review
+    
+    except PlanningError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# =========================================================
+# ENHANCED GOOGLE INTEGRATION DIAGNOSTICS
+# =========================================================
+
+@app.get("/integrations/google/diagnostics", operation_id="getGoogleDiagnostics")
+async def google_diagnostics(
+    authenticated: bool = Security(verify_api_key),
+):
+    """Comprehensive Google integration diagnostics.
+    
+    Safe (non-secret) status of Gmail, Calendar, Drive configuration,
+    read/write capabilities, and reauthorization requirements.
+    """
+    try:
+        return await get_google_integration_diagnostics()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
