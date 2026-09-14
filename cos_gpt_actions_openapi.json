@@ -16,11 +16,1114 @@
     }
   ],
   "components": {
+    "schemas": {
+      "AgentBriefCreateRequest": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "brief_type": {
+            "type": "string",
+            "title": "Brief Type",
+            "default": "INTELLIGENCE_BRIEF"
+          },
+          "source_agent_id": {
+            "type": "string",
+            "title": "Source Agent Id",
+            "default": "WD-AI-001"
+          },
+          "priority": {
+            "type": "string",
+            "title": "Priority",
+            "default": "NORMAL"
+          },
+          "reporting_period_start": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reporting Period Start"
+          },
+          "reporting_period_end": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reporting Period End"
+          },
+          "sections": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Sections"
+          },
+          "practical_move": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Practical Move"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags"
+          },
+          "requires_human_approval": {
+            "type": "boolean",
+            "title": "Requires Human Approval",
+            "default": false
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "external_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Reference"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "sections"
+        ],
+        "title": "AgentBriefCreateRequest"
+      },
+      "AgentBriefUpdateRequest": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "practical_move": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Practical Move"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags"
+          },
+          "requires_human_approval": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requires Human Approval"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          }
+        },
+        "type": "object",
+        "title": "AgentBriefUpdateRequest"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "TaskCreateRequest": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "department": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Department"
+          },
+          "project": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project"
+          },
+          "client": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner",
+            "default": "Jermain Gordon"
+          },
+          "priority": {
+            "type": "string",
+            "title": "Priority",
+            "default": "NORMAL"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "next_action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Action"
+          },
+          "blocker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocker"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "default": "COS"
+          },
+          "domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain"
+          },
+          "goal_links": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal Links"
+          },
+          "estimated_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Minutes"
+          },
+          "deadline": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline"
+          },
+          "planned_work_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Planned Work Date"
+          },
+          "dependencies": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dependencies"
+          },
+          "waiting_for_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waiting For Date"
+          },
+          "postponement_count": {
+            "type": "integer",
+            "title": "Postponement Count",
+            "default": 0
+          },
+          "source_system": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source System"
+          },
+          "external_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Id"
+          },
+          "gmail_thread_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gmail Thread Id"
+          },
+          "gmail_message_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gmail Message Ids"
+          },
+          "calendar_event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calendar Event Id"
+          },
+          "reminders_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reminders Id"
+          },
+          "reminders_list": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reminders List"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "title": "TaskCreateRequest"
+      },
+      "TaskUpdateRequest": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "department": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Department"
+          },
+          "project": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project"
+          },
+          "client": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "next_action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Action"
+          },
+          "blocker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocker"
+          },
+          "domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain"
+          },
+          "goal_links": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal Links"
+          },
+          "estimated_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Minutes"
+          },
+          "deadline": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline"
+          },
+          "planned_work_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Planned Work Date"
+          },
+          "dependencies": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dependencies"
+          },
+          "waiting_for_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waiting For Date"
+          },
+          "postponement_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Postponement Count"
+          },
+          "source_system": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source System"
+          },
+          "external_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Id"
+          },
+          "gmail_thread_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gmail Thread Id"
+          },
+          "gmail_message_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gmail Message Ids"
+          },
+          "calendar_event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calendar Event Id"
+          },
+          "reminders_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reminders Id"
+          },
+          "reminders_list": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reminders List"
+          },
+          "sync_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Version"
+          },
+          "pending_commands": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Commands"
+          },
+          "conflict_flags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conflict Flags"
+          },
+          "reminders_sync_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reminders Sync Version"
+          },
+          "reminders_last_sync": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reminders Last Sync"
+          },
+          "actual_duration_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Duration Minutes"
+          }
+        },
+        "type": "object",
+        "title": "TaskUpdateRequest"
+      },
+      "TradeHubCloseRequest": {
+        "properties": {
+          "broker": {
+            "type": "string",
+            "title": "Broker"
+          },
+          "account_type": {
+            "type": "string",
+            "title": "Account Type"
+          },
+          "trade_id": {
+            "type": "string",
+            "title": "Trade Id"
+          },
+          "close_type": {
+            "type": "string",
+            "title": "Close Type",
+            "default": "full"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "requested_by": {
+            "type": "string",
+            "title": "Requested By",
+            "default": "WD-AI-001"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "default": "COS"
+          },
+          "approval_confirmed": {
+            "type": "boolean",
+            "title": "Approval Confirmed",
+            "default": false
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "broker",
+          "account_type",
+          "trade_id"
+        ],
+        "title": "TradeHubCloseRequest"
+      },
+      "TradeHubTradeRequest": {
+        "properties": {
+          "account_type": {
+            "type": "string",
+            "title": "Account Type"
+          },
+          "instrument": {
+            "type": "string",
+            "title": "Instrument"
+          },
+          "side": {
+            "type": "string",
+            "title": "Side"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          },
+          "risk": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk"
+          },
+          "stop_loss": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Loss"
+          },
+          "take_profit": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Take Profit"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "requested_by": {
+            "type": "string",
+            "title": "Requested By",
+            "default": "WD-AI-001"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "default": "COS"
+          },
+          "approval_confirmed": {
+            "type": "boolean",
+            "title": "Approval Confirmed",
+            "default": false
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "account_type",
+          "instrument",
+          "side"
+        ],
+        "title": "TradeHubTradeRequest"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
     "securitySchemes": {
       "bearerAuth": {
         "type": "http",
-        "scheme": "bearer",
-        "bearerFormat": "JWT"
+        "scheme": "bearer"
       }
     }
   },
@@ -73,7 +1176,7 @@
         },
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ]
       }
@@ -84,7 +1187,7 @@
         "operationId": "highlevel_account_status_highlevel_accounts__account_key__status_get",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -126,7 +1229,7 @@
         "operationId": "highlevel_account_summary_highlevel_accounts__account_key__summary_get",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -168,7 +1271,7 @@
         "operationId": "highlevel_contacts_highlevel_accounts__account_key__contacts_get",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -254,7 +1357,7 @@
         "operationId": "highlevel_opportunities_highlevel_accounts__account_key__opportunities_get",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -372,7 +1475,7 @@
         "operationId": "highlevel_pipelines_highlevel_accounts__account_key__pipelines_get",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -414,7 +1517,7 @@
         "operationId": "highlevel_workflows_highlevel_accounts__account_key__workflows_get",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -456,7 +1559,7 @@
         "operationId": "highlevel_tags_highlevel_accounts__account_key__tags_get",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -498,7 +1601,7 @@
         "operationId": "highlevel_conversations_highlevel_accounts__account_key__conversations_get",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -552,7 +1655,7 @@
         "operationId": "highlevel_agents_highlevel_accounts__account_key__agents_get",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -637,7 +1740,7 @@
         },
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ]
       }
@@ -658,7 +1761,7 @@
         },
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ]
       }
@@ -669,7 +1772,7 @@
         "operationId": "legacy_highlevel_contacts_highlevel_contacts_get",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -730,7 +1833,7 @@
         "operationId": "legacy_highlevel_opportunities_highlevel_opportunities_get",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -817,7 +1920,7 @@
         },
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ]
       }
@@ -838,7 +1941,7 @@
         },
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ]
       }
@@ -849,7 +1952,7 @@
         "operationId": "legacy_highlevel_agents_highlevel_agents_get",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -925,7 +2028,7 @@
         },
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ]
       }
@@ -936,7 +2039,7 @@
         "operationId": "legacySearchGmailMessages",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -999,7 +2102,7 @@
         "operationId": "legacyGetGmailMessage",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -1041,7 +2144,7 @@
         "operationId": "legacyListCalendarEvents",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -1112,7 +2215,7 @@
         "operationId": "searchDriveFiles",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -1175,7 +2278,7 @@
         "operationId": "getDriveFileMetadata",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -1217,7 +2320,7 @@
         "operationId": "getDriveFileContent",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -1269,7 +2372,7 @@
         },
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ]
       }
@@ -1290,7 +2393,7 @@
         },
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ]
       }
@@ -1311,7 +2414,7 @@
         },
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ]
       }
@@ -1332,7 +2435,7 @@
         },
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ]
       }
@@ -1353,7 +2456,7 @@
         },
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ]
       }
@@ -1374,7 +2477,7 @@
         },
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ]
       }
@@ -1385,7 +2488,7 @@
         "operationId": "getTradeHubOpenTrades",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -1466,7 +2569,7 @@
         "operationId": "getTradeHubTradeHistory",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -1575,7 +2678,7 @@
         "operationId": "getTradeHubPerformance",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -1676,7 +2779,7 @@
         },
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ]
       }
@@ -1687,7 +2790,7 @@
         "operationId": "getTradeHubActions",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -1810,7 +2913,7 @@
         },
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ]
       }
@@ -1851,7 +2954,7 @@
         },
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ]
       }
@@ -1872,7 +2975,7 @@
         },
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ]
       }
@@ -1883,7 +2986,7 @@
         "operationId": "api_create_task_tasks_post",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "requestBody": {
@@ -1922,7 +3025,7 @@
         "operationId": "api_get_tasks_tasks_get",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -2057,7 +3160,7 @@
         },
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ]
       }
@@ -2078,7 +3181,7 @@
         },
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ]
       }
@@ -2089,7 +3192,7 @@
         "operationId": "api_priority_tasks_tasks_priorities_get",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -2134,7 +3237,7 @@
         "operationId": "api_get_task_tasks__task_id__get",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -2174,7 +3277,7 @@
         "operationId": "api_update_task_tasks__task_id__patch",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -2224,7 +3327,7 @@
         "operationId": "api_delete_task_tasks__task_id__delete",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -2266,7 +3369,7 @@
         "operationId": "api_complete_task_tasks__task_id__complete_post",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -2318,7 +3421,7 @@
         },
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ]
       }
@@ -2329,7 +3432,7 @@
         "operationId": "getAgent",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -2371,7 +3474,7 @@
         "operationId": "getAgentStatus",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -2413,7 +3516,7 @@
         "operationId": "createAgentBrief",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -2479,7 +3582,7 @@
         "operationId": "listAgentBriefs",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -2592,7 +3695,7 @@
         "operationId": "getAgentBrief",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -2641,7 +3744,7 @@
         "operationId": "updateAgentBrief",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -2702,7 +3805,7 @@
         "operationId": "acknowledgeAgentBrief",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -2753,7 +3856,7 @@
         "operationId": "completeAgentBrief",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -2804,7 +3907,7 @@
         "operationId": "retryAgentBriefDelivery",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -2865,7 +3968,7 @@
         },
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ]
       }
@@ -2877,7 +3980,7 @@
         "operationId": "searchGmailMessages",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -2955,7 +4058,7 @@
         "operationId": "getGmailMessage",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -2998,7 +4101,7 @@
         "operationId": "getGmailThread",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -3041,7 +4144,7 @@
         "operationId": "listGmailLabels",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "responses": {
@@ -3061,7 +4164,7 @@
         "operationId": "createGmailLabel",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -3104,7 +4207,7 @@
         "operationId": "applyGmailLabel",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -3154,7 +4257,7 @@
         "operationId": "removeGmailLabel",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -3206,7 +4309,7 @@
         "operationId": "archiveGmailMessage",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -3249,7 +4352,7 @@
         "operationId": "createGmailDraft",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -3326,7 +4429,7 @@
         "operationId": "updateGmailDraft",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -3396,7 +4499,7 @@
         "operationId": "sendGmailDraft",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -3452,7 +4555,7 @@
         "operationId": "getGmailContext",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -3505,7 +4608,7 @@
         },
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ]
       }
@@ -3517,7 +4620,7 @@
         "operationId": "getCalendarEvents",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -3620,7 +4723,7 @@
         "operationId": "checkCalendarAvailability",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -3692,7 +4795,7 @@
         "operationId": "createFocusBlock",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -3825,7 +4928,7 @@
         "operationId": "updateFocusBlock",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -3950,7 +5053,7 @@
         "operationId": "cancelFocusBlock",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -4003,7 +5106,7 @@
         "operationId": "getDailyPlan",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -4071,7 +5174,7 @@
         "operationId": "getWeeklyReview",
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ],
         "parameters": [
@@ -4125,7 +5228,7 @@
         },
         "security": [
           {
-            "COS API Key": []
+            "bearerAuth": []
           }
         ]
       }
