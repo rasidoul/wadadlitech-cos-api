@@ -137,6 +137,7 @@ from services.reminders_operations import (
     acknowledge_sync,
 )
 
+from services.mcp_connector import register_mcp
 from services.planning_operations import (
     PlanningError,
     get_daily_plan,
@@ -2718,3 +2719,11 @@ async def google_diagnostics(
         return await get_google_integration_diagnostics()
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e))
+
+
+# =========================================================
+# CLAUDE MCP CONNECTOR
+# =========================================================
+# Registered last so every route above is exposed as an MCP tool.
+
+register_mcp(app)

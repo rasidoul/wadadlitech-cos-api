@@ -28,6 +28,47 @@ Authorization: Bearer <COS_API_KEY>
 | Invalid/incorrect bearer token | `403` |
 | Server has no `COS_API_KEY` configured | `500` |
 
+## Claude connector (MCP)
+
+The API also serves a remote MCP server at `/mcp` (Streamable HTTP), so Claude
+can call it directly as a custom connector. Every route in the GPT Actions
+schema is exposed as a tool (deprecated GitHub routes, device-only Reminders
+routes and legacy duplicates are left out), and tools run the existing routes
+in-process, so validation and safety gates are unchanged. Read-only routes are
+marked read-only; sending email, archiving, deleting and TradeHub trade/close
+requests are marked destructive so Claude asks before running them.
+
+**claude.ai (web, desktop, mobile):** Settings → Connectors → Add custom
+connector, URL `https://wadadlitech-cos-api.onrender.com/mcp`, leave the OAuth
+fields blank. Claude opens a WadadliTech COS approval page; enter
+`COS_API_KEY` there once. Claude receives its own short-lived tokens and never
+sees the key.
+
+**Claude Code:** `claude mcp add --transport http wadadlitech-cos
+https://wadadlitech-cos-api.onrender.com/mcp` and run `/mcp` to sign in the
+same way, or pass `--header "Authorization: Bearer $COS_API_KEY"` to skip OAuth.
+
+How sign-in works:
+
+- OAuth 2.1 with dynamic client registration and S256 PKCE, served by this app
+  (`/.well-known/oauth-protected-resource`, `/.well-known/oauth-authorization-server`,
+  `/oauth/register`, `/oauth/authorize`, `/oauth/token`).
+- Only Claude's callback (`https://claude.ai/api/mcp/auth_callback`) and
+  Claude Code's loopback callback are accepted as redirect URIs.
+- Tokens are HMAC-signed and stateless, so a redeploy does not disconnect
+  Claude. Access tokens last 1 hour, refresh tokens 30 days and rotate on use.
+- Rotating `COS_API_KEY` (or `COS_MCP_SIGNING_SECRET`, if set) revokes every
+  connector token immediately.
+- The approval page locks out for 15 minutes after 10 wrong keys.
+
+Optional environment variables:
+
+```
+COS_PUBLIC_BASE_URL=          # defaults to Render's RENDER_EXTERNAL_URL
+COS_MCP_SIGNING_SECRET=       # defaults to a key derived from COS_API_KEY
+COS_MCP_EXTRA_REDIRECT_URIS=  # comma-separated, only if another MCP client needs it
+```
+
 ## Agent registry
 
 Agents the Chief of Staff can address are defined in
